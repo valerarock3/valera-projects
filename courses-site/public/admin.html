@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="adminPanel">⚙ Админ-панель</h1>
+    <div id="admin-body" class="admin-layout">
+      <div class="admin-menu">
+        <button class="active" data-panel="courses">📚 <span data-i18n="courses">Курсы</span></button>
+        <button data-panel="lessons">📝 <span data-i18n="lessonsAdmin">Уроки</span></button>
+        <button data-panel="media">🎞 <span data-i18n="mediaTitle">Медиа</span></button>
+        <button data-panel="categories">🗂 <span data-i18n="categories">Категории</span></button>
+        <button data-panel="payments">💳 <span data-i18n="payments">Оплаты</span></button>
+        <button data-panel="users">👥 <span data-i18n="users">Пользователи</span></button>
+      </div>
+      <div class="admin-panel" id="admin-panel"><div class="loading">Загрузка...</div></div>
+    </div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+    let currentPanel = "courses";
+    let allCategories = [];
+    let allCourses = [];
+    let me = null;
+    let editingCourseId = null;
+
+    async function checkAdmin() {
+      me = await fetchMe();
+      if (!me) { window.location.href = "login.html"; return false; }
+      if (me.role !== "admin") {
+        document.getElementById("admin-body").innerHTML = `<div class="empty">${t("accessDenied")}</div>`;
+        return false;
+      }
+      return true;
+    }
+
+    document.querySelectorAll(".admin-menu button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".admin-menu button").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentPanel = btn.dataset.panel;
+        loadPanel();
+      });
+    });
+
+    async function loadPanel() {
+      const ok = await checkAdmin();
+      if (!ok) return;
+      const panel = document.getElementById("admin-panel");
+      panel.innerHTML = `<div class="loading">${t("loading")}</div>`;
+      if (currentPanel === "courses") {
+        allCategories = await apiFetch("/api/categories");
+        allCourses = await apiFetch("/api/courses");
+        renderCourses(panel);
+      } else if (currentPanel === "lessons") {
+        allCategories = await apiFetch("/api/categories");
+        allCourses = await apiFetch("/api/courses");
+        renderLessons(panel);
+      } else if (currentPanel === "media") {
+        allCategories = await apiFetch("/api/categories");
+        allCourses = await apiFetch("/api/courses");
+        renderMedia(panel);
+      } else if (currentPanel === "categories") {
+        allCategories = await apiFetch("/api/categories");
+        renderCategories(panel);
+      } else if (currentPanel === "payments") {
+        const payments = await apiFetch("/api/admin/payments");
+        renderPayments(panel, payments);
+      } else if (currentPanel === "users") {
+        const users = await apiFetch("/api/admin/users");
+        renderUsers(panel, users);
+      }
+      applyI18n();
+    }
+
+    function renderCourses(panel) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("courses")} (${allCourses.length})</div>
+        <div class="admin-form">
+          <h4 id="c-form-title">${t("addCourse")}</h4>
+          <div class="form-group"><label>${t("title")}</label><input id="c-title"></div>
+          <div class="form-group"><label>${t("description")}</label><textarea id="c-desc"></textarea></div>
+          <div class="form-group"><label>${t("price")}</label><input type="number" id="c-price" value="0"></div>
+          <div class="form-group"><label>${t("category")}</label><select id="c-cat"><option value="">${t("noCategoryOpt")}</option>${allCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></div>
+          <div class="form-group"><label>${t("instructorField")}</label><input id="c-instr"></div>
+          <div class="form-group"><label>${t("imageUrl")}</label><input id="c-img" placeholder="https://..."></div>
+          <div class="drop-zone" id="dz-course-img">
+            <div class="dz-text">🖼 ${t("dragImage")}</div>
+            <div class="dz-preview"></div>
+            <div class="dz-status"></div>
+          </div>
+          <div class="drop-zone" id="dz-course-gallery">
+            <div class="dz-text">🎞 ${t("dragMediaMulti")}</div>
+            <div class="dz-status"></div>
+          </div>
+          <div class="gallery-after-save">💡 ${t("galleryAfterSave")}</div>
+          <div id="dz-course-pending"></div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="c-save">${t("save")}</button>
+            <button class="btn btn-outline hidden" id="c-cancel">✕ ${t("cancel")}</button>
+          </div>
+        </div>
+        ${allCourses.map(c => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${c.title} <span style="color:var(--text-faint);font-size:12px">(${fmtPrice(c.price)})</span></div>
+              <div class="ar-sub">${c.category_name || t("noCategoryOpt")} · ${c.lessons_count || 0} ${t("lessonsWord")} · ${t("instructorWord")}: ${c.instructor || "—"}</div>
+            </div>
+            <div class="ar-actions">
+              <button class="btn btn-outline btn-sm" data-edit="${c.id}">${t("lessonsBtn")}</button>
+              <button class="btn btn-outline btn-sm" data-editcourse="${c.id}">✏ ${t("edit")}</button>
+              <button class="btn btn-danger btn-sm" data-del="${c.id}">${t("delete")}</button>
+            </div>
+          </div>`).join("")}
+      `;
+      document.getElementById("c-save").addEventListener("click", async () => {
+        const btn = document.getElementById("c-save");
+        btn.disabled = true;
+        try {
+          const payload = {
+            title: document.getElementById("c-title").value,
+            description: document.getElementById("c-desc").value,
+            price: document.getElementById("c-price").value,
+            category_id: document.getElementById("c-cat").value || null,
+            instructor: document.getElementById("c-instr").value,
+            image_url: document.getElementById("c-img").value,
+          };
+          let created;
+          if (editingCourseId) {
+            created = await apiFetch(`/api/admin/courses/${editingCourseId}`, {
+              method: "PUT", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          } else {
+            created = await apiFetch("/api/admin/courses", {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+          }
+          if (pendingCourseFiles.length) {
+            const cid = editingCourseId || created.id;
+            const status = document.getElementById("dz-course-gallery").querySelector(".dz-status");
+            for (let i = 0; i < pendingCourseFiles.length; i++) {
+              status.textContent = t("uploading") + ` (${i + 1}/${pendingCourseFiles.length})`;
+              status.className = "dz-status";
+              const fd = new FormData();
+              fd.append("file", pendingCourseFiles[i]);
+              const res = await fetch("/api/upload", { method: "POST", body: fd });
+              const data = await res.json();
+              if (!res.ok) throw new Error(translateError(data.error) || "Error");
+              await apiFetch(`/api/admin/courses/${cid}/media`, {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: data.url }),
+              });
+            }
+            status.textContent = "✔ " + t("uploaded") + " " + pendingCourseFiles.length + " " + t("filesWord");
+            status.className = "dz-status ok";
+          }
+          pendingCourseFiles.length = 0;
+          editingCourseId = null;
+        } finally {
+          btn.disabled = false;
+          loadPanel();
+        }
+      });
+      document.getElementById("c-cancel").addEventListener("click", () => {
+        editingCourseId = null;
+        loadPanel();
+      });
+      panel.querySelectorAll("[data-editcourse]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const cid = Number(btn.dataset.editcourse);
+          const course = allCourses.find(c => c.id === cid);
+          if (!course) return;
+          editingCourseId = cid;
+          document.getElementById("c-form-title").textContent = t("editCourse") + ": " + course.title;
+          document.getElementById("c-title").value = course.title;
+          document.getElementById("c-desc").value = course.description || "";
+          document.getElementById("c-price").value = course.price;
+          document.getElementById("c-cat").value = course.category_id || "";
+          document.getElementById("c-instr").value = course.instructor || "";
+          document.getElementById("c-img").value = course.image_url || "";
+          document.getElementById("c-cancel").classList.remove("hidden");
+          document.getElementById("c-save").textContent = t("saveChanges");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+      const pendingCourseFiles = renderCoursesGallery();
+      panel.querySelectorAll("[data-del]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeleteCourse"))) return;
+          await apiFetch(`/api/admin/courses/${btn.dataset.del}`, { method: "DELETE" });
+          loadPanel();
+        });
+      });
+      panel.querySelectorAll("[data-edit]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const cid = Number(btn.dataset.edit);
+          if (!allCourses.some(c => c.id === cid)) return;
+          const menuBtn = document.querySelector('.admin-menu button[data-panel="lessons"]');
+          menuBtn.click();
+          setTimeout(() => { const sel = document.getElementById("l-course"); if (sel) sel.value = cid; sel.dispatchEvent(new Event("change")); }, 100);
+        });
+      });
+      makeDropZone("dz-course-img", "c-img", "image/*");
+    }
+
+    function renderCoursesGallery() {
+      const pending = [];
+      const zone = document.getElementById("dz-course-gallery");
+      if (!zone) return pending;
+      const status = zone.querySelector(".dz-status");
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.hidden = true;
+      fileInput.multiple = true;
+      fileInput.accept = "image/*,video/*,audio/*";
+      zone.appendChild(fileInput);
+
+      zone.addEventListener("click", () => fileInput.click());
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("drag");
+        if (e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+      });
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) addFiles(fileInput.files);
+        fileInput.value = "";
+      });
+
+      function addFiles(fileList) {
+        for (const file of fileList) {
+          if (["image", "video", "audio"].some(p => file.type.startsWith(p + "/"))) {
+            pending.push(file);
+          } else {
+            status.textContent = t("uploadBadType");
+            status.className = "dz-status bad";
+          }
+        }
+        renderPending();
+      }
+
+      function renderPending() {
+        const box = document.getElementById("dz-course-pending");
+        if (!box) return;
+        box.innerHTML = pending.length ? pending.map((f, i) => `
+          <div class="pf-row">
+            <span class="pf-icon">${f.type.startsWith("image/") ? "🖼" : f.type.startsWith("video/") ? "🎬" : "🎵"}</span>
+            <span class="pf-name">${escapeHtml(f.name)}</span>
+            <button class="btn btn-danger btn-sm" data-rm="${i}">${t("delete")}</button>
+          </div>`).join("") : "";
+        box.querySelectorAll("[data-rm]").forEach(btn => btn.addEventListener("click", () => {
+          pending.splice(Number(btn.dataset.rm), 1);
+          renderPending();
+        }));
+      }
+      return pending;
+    }
+
+    function renderLessons(panel) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("lessonsAdmin")}</div>
+        <div class="form-group"><label>${t("chooseCourse")}</label><select id="l-course">
+          ${allCourses.map(c => `<option value="${c.id}">${c.title}</option>`).join("")}
+        </select></div>
+        <div class="admin-form">
+          <h4>${t("addLesson")}</h4>
+          <div class="form-group"><label>${t("lessonTitle")}</label><input id="l-title"></div>
+          <div class="form-group"><label>${t("content")}</label><textarea id="l-content" placeholder="${t("contentPh")}"></textarea></div>
+          <div class="form-group"><label>${t("videoUrl")}</label><input id="l-video" placeholder="${t("videoUrlPh")}"></div>
+          <div class="drop-zone" id="dz-lesson-media">
+            <div class="dz-text">🎬 ${t("dragMedia")}</div>
+            <div class="dz-preview"></div>
+            <div class="dz-status"></div>
+          </div>
+          <div class="form-group"><label>${t("lessonImage")}</label><input id="l-image" placeholder="https://..."></div>
+          <div class="drop-zone" id="dz-lesson-img">
+            <div class="dz-text">🖼 ${t("dragImage")}</div>
+            <div class="dz-preview"></div>
+            <div class="dz-status"></div>
+          </div>
+          <div class="form-group"><label>${t("duration")}</label><input type="number" id="l-dur" value="30"></div>
+
+          <div class="quiz-editor">
+            <h4>${t("quizTitle")}</h4>
+            <div class="form-group">
+              <label>${t("quizTextLabel")}</label>
+              <textarea id="l-quiz-text" placeholder="${t("quizTextPh")}"></textarea>
+            </div>
+            <div class="quiz-tools">
+              <button class="btn btn-outline btn-sm" id="l-quiz-import">📂 ${t("quizImportFile")}</button>
+              <button class="btn btn-outline btn-sm" id="l-quiz-parse">⚙ ${t("quizParse")}</button>
+              <button class="btn btn-danger btn-sm" id="l-quiz-clear">${t("quizClear")}</button>
+            </div>
+            <input type="file" id="l-quiz-file" hidden accept=".txt,.json,text/plain,application/json">
+            <div id="l-quiz-preview"></div>
+            <input type="hidden" id="l-quiz-json">
+          </div>
+
+          <button class="btn btn-primary" id="l-save">${t("save")}</button>
+        </div>
+        <div id="l-list"><div class="loading">${t("loading")}</div></div>
+      `;
+      const courseSelect = document.getElementById("l-course");
+      const loadLessons = async () => {
+        const cid = courseSelect.value;
+        if (!cid) { document.getElementById("l-list").innerHTML = ""; return; }
+        const course = await apiFetch(`/api/courses/${cid}`);
+        document.getElementById("l-list").innerHTML = course.lessons.map(l => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${l.position + 1}. ${l.title}</div>
+              <div class="ar-sub">⏱ ${l.duration_min} ${t("min")}${l.video_url ? " · 🎬 " + t("videoYes") : ""}${l.image_url ? " · 🖼 " + t("imageYes") : ""}${l.quiz && l.quiz.length ? " · 📝 " + t("quizQuestionsCount") + ": " + l.quiz.length : ""}</div>
+            </div>
+            <div class="ar-actions"><button class="btn btn-danger btn-sm" data-del="${l.id}">${t("delete")}</button></div>
+          </div>`).join("") || `<div class="empty">${t("lessonNo")}</div>`;
+        document.getElementById("l-list").querySelectorAll("[data-del]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            await apiFetch(`/api/admin/lessons/${btn.dataset.del}`, { method: "DELETE" });
+            loadLessons();
+          });
+        });
+      };
+      courseSelect.addEventListener("change", loadLessons);
+
+      const quizJsonInput = () => document.getElementById("l-quiz-json");
+
+      document.getElementById("l-quiz-file").addEventListener("change", async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        if (file.name.endsWith(".json")) {
+          try {
+            const data = JSON.parse(text);
+            const arr = Array.isArray(data) ? data : (data.questions || []);
+            quizJsonInput().value = JSON.stringify(arr);
+            renderQuizPreview();
+          } catch {
+            document.getElementById("l-quiz-preview").innerHTML = `<div class="empty" style="color:var(--danger-text)">${t("quizJsonBad")}</div>`;
+          }
+        } else {
+          document.getElementById("l-quiz-text").value = text;
+          parseQuizNow();
+        }
+      });
+      document.getElementById("l-quiz-import").addEventListener("click", () => document.getElementById("l-quiz-file").click());
+      document.getElementById("l-quiz-parse").addEventListener("click", parseQuizNow);
+      document.getElementById("l-quiz-clear").addEventListener("click", () => {
+        document.getElementById("l-quiz-text").value = "";
+        document.getElementById("l-quiz-json").value = "";
+        document.getElementById("l-quiz-preview").innerHTML = "";
+      });
+
+      function parseQuizNow() {
+        const text = document.getElementById("l-quiz-text").value || "";
+        const questions = parseQuizText(text);
+        quizJsonInput().value = questions.length ? JSON.stringify(questions) : "";
+        renderQuizPreview(questions);
+      }
+
+      function renderQuizPreview(qs) {
+        const questions = qs || (() => { try { return JSON.parse(quizJsonInput().value || "[]"); } catch { return []; } })();
+        document.getElementById("l-quiz-preview").innerHTML = questions.length
+          ? `<div class="quiz-preview-head">${t("quizParsed")}: ${questions.length}</div>` +
+            questions.map((q, i) => `
+              <div class="quiz-preview-item">
+                <div class="qp-q">${i + 1}. ${escapeHtml(q.q)}</div>
+                ${q.options.map((o, j) => `<div class="qp-o ${j === q.correct ? "correct" : ""}">${j === q.correct ? "✔" : "•"} ${escapeHtml(o)}</div>`).join("")}
+              </div>`).join("")
+          : `<div class="empty">${t("quizNoQuestions")}</div>`;
+      }
+
+      document.getElementById("l-save").addEventListener("click", async () => {
+        let quiz = quizJsonInput().value;
+        if (!quiz) { parseQuizNow(); quiz = quizJsonInput().value; }
+        await apiFetch(`/api/admin/courses/${courseSelect.value}/lessons`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: document.getElementById("l-title").value,
+            content: document.getElementById("l-content").value,
+            duration_min: document.getElementById("l-dur").value,
+            video_url: document.getElementById("l-video").value,
+            image_url: document.getElementById("l-image").value,
+            quiz: quiz || null,
+          }),
+        });
+        document.getElementById("l-title").value = "";
+        document.getElementById("l-content").value = "";
+        document.getElementById("l-video").value = "";
+        document.getElementById("l-image").value = "";
+        document.getElementById("l-quiz-text").value = "";
+        document.getElementById("l-quiz-json").value = "";
+        document.getElementById("l-quiz-preview").innerHTML = "";
+        document.querySelectorAll(".dz-preview").forEach(p => p.innerHTML = "");
+        document.querySelectorAll(".dz-status").forEach(s => { s.textContent = ""; s.className = "dz-status"; });
+        loadLessons();
+      });
+      loadLessons();
+      makeDropZone("dz-lesson-media", "l-video", "video/*,audio/*");
+      makeDropZone("dz-lesson-img", "l-image", "image/*");
+    }
+
+    function parseQuizText(text) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      const questions = [];
+      let current = null;
+      for (const line of lines) {
+        const isOption = /^[-*+•◦・✓✔]/.test(line);
+        if (!isOption) {
+          current = { q: line.replace(/^\d+[.)]\s*/, ""), options: [], correct: -1 };
+          questions.push(current);
+        } else if (current) {
+          const correct = /^[*+]/.test(line);
+          const opt = line
+            .replace(/^[-*+•◦・✓✔]\s*/, "")
+            .replace(/\s*\((?:правильный|верный|correct)\)\s*$/i, "")
+            .trim();
+          current.options.push(opt);
+          if (correct) current.correct = current.options.length - 1;
+        }
+      }
+      return questions.filter(q => q.q && q.options.length >= 2);
+    }
+
+    function renderMedia(panel) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("mediaTitle")}</div>
+        <div class="form-group"><label>${t("chooseCourse")}</label><select id="m-course">
+          ${allCourses.map(c => `<option value="${c.id}">${c.title}</option>`).join("")}
+        </select></div>
+        <div class="drop-zone" id="dz-media">
+          <div class="dz-text">🎞 ${t("dragMediaMulti")}</div>
+          <div class="dz-status"></div>
+        </div>
+        <div id="m-list"><div class="loading">${t("loading")}</div></div>
+      `;
+      const courseSelect = document.getElementById("m-course");
+      const loadMedia = async () => {
+        const cid = courseSelect.value;
+        if (!cid) { document.getElementById("m-list").innerHTML = ""; return; }
+        const course = await apiFetch(`/api/courses/${cid}`);
+        const media = course.media || [];
+        document.getElementById("m-list").innerHTML = media.length
+          ? `<div class="media-grid">` + media.map(m => `
+              <div class="media-card">
+                <div class="media-thumb">${thumbHtml(m)}</div>
+                <div class="media-actions">
+                  <span class="media-type">${typeLabel(m.type)}</span>
+                  <button class="btn btn-danger btn-sm" data-del="${m.id}">${t("delete")}</button>
+                </div>
+              </div>`).join("") + `</div>`
+          : `<div class="empty">${t("mediaEmpty")}</div>`;
+        document.getElementById("m-list").querySelectorAll("[data-del]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            await apiFetch(`/api/admin/media/${btn.dataset.del}`, { method: "DELETE" });
+            loadMedia();
+          });
+        });
+      };
+      courseSelect.addEventListener("change", loadMedia);
+
+      const zone = document.getElementById("dz-media");
+      const status = zone.querySelector(".dz-status");
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.hidden = true;
+      fileInput.multiple = true;
+      fileInput.accept = "image/*,video/*,audio/*";
+      zone.appendChild(fileInput);
+      zone.addEventListener("click", () => fileInput.click());
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("drag");
+        if (e.dataTransfer.files.length) uploadMany([...e.dataTransfer.files]);
+      });
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) uploadMany([...fileInput.files]);
+        fileInput.value = "";
+      });
+
+      async function uploadMany(files) {
+        const cid = courseSelect.value;
+        if (!cid) { alert(t("chooseCourse")); return; }
+        let ok = 0;
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          if (!["image", "video", "audio"].some(p => file.type.startsWith(p + "/"))) continue;
+          status.textContent = t("uploading") + ` (${ok + 1}/${files.length})`;
+          status.className = "dz-status";
+          try {
+            const fd = new FormData();
+            fd.append("file", file);
+            const res = await fetch("/api/upload", { method: "POST", body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(translateError(data.error) || "Error");
+            await apiFetch(`/api/admin/courses/${cid}/media`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: data.url }),
+            });
+            ok++;
+          } catch (err) {
+            status.textContent = err.message;
+            status.className = "dz-status bad";
+            break;
+          }
+        }
+        status.textContent = ok ? `✔ ${t("uploaded")} ${ok} ${t("filesWord")}` : status.textContent;
+        status.className = ok ? "dz-status ok" : status.className;
+        loadMedia();
+      }
+      loadMedia();
+    }
+
+    function thumbHtml(m) {
+      if (m.type === "image") return `<img src="${escapeHtml(m.url)}">`;
+      if (m.type === "video") return `<video src="${escapeHtml(m.url)}" muted preload="metadata"></video>`;
+      return `<div class="audio-thumb">🎵</div>`;
+    }
+
+    function typeLabel(type) {
+      if (type === "video") return "🎬 " + t("videoYes");
+      if (type === "audio") return "🎵 " + t("audioWord");
+      return "🖼 " + t("imageWord");
+    }
+
+    function renderCategories(panel) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("categories")}</div>
+        <div class="admin-form">
+          <h4>${t("addCategory")}</h4>
+          <div class="form-group"><label>${t("catName")}</label><input id="cat-name"></div>
+          <div class="form-group"><label>${t("catDesc")}</label><textarea id="cat-desc"></textarea></div>
+          <button class="btn btn-primary" id="cat-save">${t("save")}</button>
+        </div>
+        ${allCategories.map(c => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${c.name}</div>
+              <div class="ar-sub">${c.description || ""}</div>
+            </div>
+            <div class="ar-actions"><button class="btn btn-danger btn-sm" data-del="${c.id}">${t("delete")}</button></div>
+          </div>`).join("")}
+      `;
+      document.getElementById("cat-save").addEventListener("click", async () => {
+        await apiFetch("/api/admin/categories", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: document.getElementById("cat-name").value,
+            description: document.getElementById("cat-desc").value,
+          }),
+        });
+        loadPanel();
+      });
+      panel.querySelectorAll("[data-del]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeleteCat"))) return;
+          await apiFetch(`/api/admin/categories/${btn.dataset.del}`, { method: "DELETE" });
+          loadPanel();
+        });
+      });
+    }
+
+    function renderPayments(panel, payments) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("payments")} (${payments.length})</div>
+        ${payments.map(p => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${p.course_title} <span class="badge badge-paid">${t("paid")}</span></div>
+              <div class="ar-sub">${t("payUser")}: ${p.user_name} · ${t("payMethod")}: ${p.method === "card" ? "💳 " + p.card_last4 : p.method} · ${new Date(p.created_at).toLocaleString(lang === "ru" ? "ru-RU" : "en-US")}</div>
+            </div>
+            <div class="ar-actions">
+              <div style="font-weight:700;color:var(--accent);margin-right:10px">${p.amount} ₽</div>
+              <button class="btn btn-danger btn-sm" data-pdel="${p.id}">${t("delete")}</button>
+            </div>
+          </div>`).join("") || `<div class="empty">${t("payments")} —</div>`}
+      `;
+      panel.querySelectorAll("[data-pdel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeletePay"))) return;
+          await apiFetch(`/api/admin/payments/${btn.dataset.pdel}`, { method: "DELETE" });
+          loadPanel();
+        });
+      });
+    }
+
+    function renderUsers(panel, users) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("users")} (${users.length})</div>
+        ${users.map(u => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${u.name} <span class="badge ${u.role === "admin" ? "badge-admin" : "badge-user"}">${u.role === "admin" ? t("adminBadge") : t("userBadge")}</span>${u.id === me.id ? ` <span class="badge badge-self">${t("you")}</span>` : ""}</div>
+              <div class="ar-sub">${u.email} · ${u.courses_count || 0} ${t("coursesCount")} · ${t("userRegistered")} ${new Date(u.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}</div>
+              ${u.courses && u.courses.length
+                ? `<div class="ar-sub ar-courses">${t("enrolledCourses")}: ${u.courses.map(c =>
+                    `<span class="badge badge-user">${c.title} <button class="btn btn-danger btn-xs" data-erem="${u.id}" data-cid="${c.id}" title="${t("removeCourse")}">✕</button></span>`
+                  ).join(" ")}</div>`
+                : `<div class="ar-sub ar-courses ar-empty">${t("noCourses")}</div>`}
+            </div>
+            <div class="ar-actions">
+              <button class="btn btn-outline btn-sm" data-role="${u.id}" data-new="${u.role === "admin" ? "user" : "admin"}">
+                ${u.role === "admin" ? t("makeUser") : t("makeAdmin")}
+              </button>
+              ${u.id === me.id
+                ? `<button class="btn btn-sm" disabled title="${t("delSelfBlocked")}">${t("delete")}</button>`
+                : `<button class="btn btn-danger btn-sm" data-udel="${u.id}">${t("delete")}</button>`}
+            </div>
+          </div>`).join("")}
+      `;
+      panel.querySelectorAll("[data-role]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          await apiFetch(`/api/admin/users/${btn.dataset.role}/role`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ role: btn.dataset.new }),
+          });
+          loadPanel();
+        });
+      });
+      panel.querySelectorAll("[data-udel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const target = users.find(u => String(u.id) === btn.dataset.udel);
+          if (!confirm((target && target.role === "admin" ? t("confirmDeleteAdmin") : t("confirmDeleteUser")) + " " + (target ? target.name : ""))) return;
+          try {
+            await apiFetch(`/api/admin/users/${btn.dataset.udel}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
+      panel.querySelectorAll("[data-erem]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const target = users.find(u => String(u.id) === btn.dataset.erem);
+          if (!confirm(t("confirmRemoveCourse") + " " + (target ? target.name : ""))) return;
+          try {
+            await apiFetch(`/api/admin/users/${btn.dataset.erem}/courses/${btn.dataset.cid}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
+    }
+
+    function makeDropZone(zoneId, inputId, accept) {
+      const zone = document.getElementById(zoneId);
+      const input = document.getElementById(inputId);
+      if (!zone || !input) return;
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+      fileInput.hidden = true;
+      fileInput.accept = accept;
+      zone.appendChild(fileInput);
+      const status = zone.querySelector(".dz-status");
+      const preview = zone.querySelector(".dz-preview");
+      zone.addEventListener("click", () => fileInput.click());
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("drag"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+      zone.addEventListener("drop", (e) => {
+        e.preventDefault();
+        zone.classList.remove("drag");
+        if (e.dataTransfer.files.length) handle(fileInput, e.dataTransfer.files[0]);
+      });
+      fileInput.addEventListener("change", () => {
+        if (fileInput.files.length) handle(fileInput, fileInput.files[0]);
+        fileInput.value = "";
+      });
+
+      async function handle(fi, file) {
+        const okType = accept.split(",").map(s => s.trim()).some(tok => {
+          if (tok.endsWith("/*")) return file.type.startsWith(tok.slice(0, -1));
+          return file.type && file.type.startsWith(tok.split("/")[0] + "/");
+        });
+        if (!okType) {
+          status.textContent = t("uploadBadType");
+          status.className = "dz-status bad";
+          return;
+        }
+        status.textContent = t("uploading") + " " + file.name;
+        status.className = "dz-status";
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(translateError(data.error) || "Error");
+          input.value = data.url;
+          showDropPreview(preview, data.url, file.type);
+          status.textContent = "✔ " + t("uploaded") + " " + data.name;
+          status.className = "dz-status ok";
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "dz-status bad";
+        }
+      }
+    }
+
+    function showDropPreview(preview, url, mime) {
+      preview.innerHTML = "";
+      const img = document.createElement("img");
+      if (mime && mime.startsWith("image/")) {
+        img.src = url;
+        preview.appendChild(img);
+      } else if (mime && mime.startsWith("video/")) {
+        const v = document.createElement("video");
+        v.src = url;
+        v.controls = true;
+        v.muted = true;
+        preview.appendChild(v);
+      } else if (mime && mime.startsWith("audio/")) {
+        const a = document.createElement("audio");
+        a.src = url;
+        a.controls = true;
+        preview.appendChild(a);
+      } else {
+        img.src = url;
+        img.onerror = () => { preview.innerHTML = "🎬 " + url; };
+        preview.appendChild(img);
+      }
+    }
+
+    initTheme();
+    renderNav();
+    loadPanel();
+  </script>
+</body>
+</html>

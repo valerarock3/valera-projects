@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мои курсы</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="myCourses">Мои курсы</h1>
+    <div id="my-courses"><div class="loading">Загрузка...</div></div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+    async function load() {
+      const container = document.getElementById("my-courses");
+      const me = await fetchMe();
+      if (!me) {
+        container.innerHTML = `<div class="empty">${t("loginToSee")} <br><a href="login.html" style="color:var(--accent)">${t("login")}</a></div>`;
+        return;
+      }
+      const courses = await apiFetch("/api/my");
+      if (!courses.length) {
+        container.innerHTML = `<div class="empty">${t("noCoursesYet")}<br><a href="index.html" style="color:var(--accent)">${t("enterToCatalog")}</a></div>`;
+        return;
+      }
+      container.innerHTML = courses.map(c => `
+        <div class="my-card" onclick="location.href='course.html?id=${c.id}'">
+          <img src="${c.image_url || "https://picsum.photos/seed/mc${c.id}/90/60"}" alt="">
+          <div>
+            <div class="mc-title">${c.title}</div>
+            <div class="mc-meta">${t("instructorWord")}: ${c.instructor || "—"}</div>
+          </div>
+          <div class="mc-progress">
+            <div class="pct">${c.progress}%</div>
+            <div class="progress-track"><div class="fill" style="width:${c.progress}%"></div></div>
+          </div>
+        </div>`).join("");
+    }
+
+    initTheme();
+    renderNav();
+    load();
+  </script>
+</body>
+</html>
