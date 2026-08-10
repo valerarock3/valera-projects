@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f6fbf"/>
+      <stop offset="1" stop-color="#4c9ce8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" opacity="0.9">
+    <path d="M200 84 c -12 14 -12 30 0 38"/>
+    <path d="M200 122 c 12 14 12 30 0 38"/>
+    <path d="M180 118 c -14 0 -26 8 -26 22"/>
+    <path d="M220 118 c 14 0 26 8 26 22"/>
+    <path d="M200 84 c -22 0 -34 -12 -34 -28"/>
+    <path d="M200 84 c 22 0 34 -12 34 -28"/>
+  </g>
+  <rect x="20" y="170" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#1f6fbf">Лимфодренажный массаж</text>
+</svg>

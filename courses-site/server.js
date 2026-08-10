@@ -678,17 +678,17 @@ app.delete("/api/admin/media/:id", requireAdmin, async (req, res) => {
 async function seed() {
   const [count] = await pool.query("SELECT COUNT(*) AS c FROM courses");
   if (count[0].c > 0) return;
-  const [cat1] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Программирование", "Языки программирования, веб-разработка и алгоритмы"]);
-  const [cat2] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Финансы", "Инвестиции, трейдинг и личные финансы"]);
-  const [cat3] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Дизайн", "UI/UX, графика и веб-дизайн"]);
-  const [cat4] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Маркетинг", "Digital-маркетинг, SEO и SMM"]);
+  const [cat1] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Классический массаж", "Базовые техники классического массажа: от поглаживаний до глубоких приёмов."]);
+  const [cat2] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Спортивный массаж", "Массаж для спортсменов: разминка, восстановление и профилактика травм."]);
+  const [cat3] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Тайский массаж", "Традиционные тайские техники: стрейчинг, давление и энергетические линии."]);
+  const [cat4] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Детский массаж", "Безопасные техники массажа для малышей и детей разного возраста."]);
 
   const base = [
-    { c: cat1.insertId, t: "JavaScript с нуля", d: "Полный курс по JavaScript: от переменных до промисов и асинхронности.", p: 3490, i: "Иван Петров", img: "/uploads/course-js.svg" },
-    { c: cat1.insertId, t: "Python для анализа данных", d: "Pandas, NumPy и визуализация данных на практике.", p: 4990, i: "Мария Смирнова", img: "/uploads/course-python.svg" },
-    { c: cat2.insertId, t: "Инвестиции для начинающих", d: "Как составить портфель, читать графики и не терять деньги.", p: 2990, i: "Алексей Волков", img: "/uploads/course-finance.svg" },
-    { c: cat3.insertId, t: "Основы UI/UX-дизайна", d: "Проектирование интерфейсов: сетки, типографика, прототипы.", p: 5490, i: "Анна Козлова", img: "/uploads/course-uiux.svg" },
-    { c: cat4.insertId, t: "SMM-маркетинг", d: "Продвижение в соцсетях: стратегия, контент, аналитика.", p: 2490, i: "Дмитрий Орлов", img: "/uploads/course-smm.svg" },
+    { c: cat1.insertId, t: "Классический массаж с нуля до профи", d: "Полный курс классического массажа: анатомия, базовые приёмы, техники спины и шеи, построение сеанса.", p: 3490, i: "Ирина Соколова", img: "/uploads/course-classic.svg" },
+    { c: cat1.insertId, t: "Лечебный массаж спины и шеи", d: "Как работать с болями в спине и шее: диагностика, глубокие техники, шейно-воротниковая зона.", p: 4990, i: "Сергей Морозов", img: "/uploads/course-spine.svg" },
+    { c: cat2.insertId, t: "Спортивный массаж и восстановление", d: "Разогревающий и восстановительный массаж, работа с крепатурой и травмами у спортсменов.", p: 2990, i: "Алексей Волков", img: "/uploads/course-sport.svg" },
+    { c: cat3.insertId, t: "Тайский массаж: традиционные техники", d: "Давление большим пальцем, стрейчинг и полная последовательность традиционного сеанса.", p: 5490, i: "Ким Сурайя", img: "/uploads/course-thai.svg" },
+    { c: cat4.insertId, t: "Детский массаж для родителей", d: "Массаж и гимнастика для малышей: безопасность, базовые приёмы, игровые техники.", p: 2490, i: "Елена Кузнецова", img: "/uploads/course-kids.svg" },
   ];
   for (const b of base) {
     await pool.query("INSERT INTO courses (category_id, title, description, price, instructor, image_url) VALUES (?, ?, ?, ?, ?, ?)", [b.c, b.t, b.d, b.p, b.i, b.img]);
