@@ -10,6 +10,7 @@
   <nav class="navbar">
     <a href="index.html" class="logo">🎓 Курсы</a>
     <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </nav>
 
   <div class="container">
@@ -93,7 +94,7 @@
           <div class="form-group"><label>${t("title")}</label><input id="c-title"></div>
           <div class="form-group"><label>${t("description")}</label><textarea id="c-desc"></textarea></div>
           <div class="form-group"><label>${t("price")}</label><input type="number" id="c-price" value="0"></div>
-          <div class="form-group"><label>${t("category")}</label><select id="c-cat"><option value="">${t("noCategoryOpt")}</option>${allCategories.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></div>
+          <div class="form-group"><label>${t("category")}</label><select id="c-cat"><option value="">${t("noCategoryOpt")}</option>${allCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}</select></div>
           <div class="form-group"><label>${t("instructorField")}</label><input id="c-instr"></div>
           <div class="form-group"><label>${t("imageUrl")}</label><input id="c-img" placeholder="https://..."></div>
           <div class="drop-zone" id="dz-course-img">
@@ -115,8 +116,8 @@
         ${allCourses.map(c => `
           <div class="admin-row">
             <div>
-              <div class="ar-title">${c.title} <span style="color:var(--text-faint);font-size:12px">(${fmtPrice(c.price)})</span></div>
-              <div class="ar-sub">${c.category_name || t("noCategoryOpt")} · ${c.lessons_count || 0} ${t("lessonsWord")} · ${t("instructorWord")}: ${c.instructor || "—"}</div>
+              <div class="ar-title">${escapeHtml(c.title)} <span style="color:var(--text-faint);font-size:12px">(${fmtPrice(c.price)})</span></div>
+              <div class="ar-sub">${escapeHtml(c.category_name) || t("noCategoryOpt")} · ${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)} · ${t("instructorWord")}: ${escapeHtml(c.instructor) || "—"}</div>
             </div>
             <div class="ar-actions">
               <button class="btn btn-outline btn-sm" data-edit="${c.id}">${t("lessonsBtn")}</button>
@@ -211,7 +212,7 @@
           if (!allCourses.some(c => c.id === cid)) return;
           const menuBtn = document.querySelector('.admin-menu button[data-panel="lessons"]');
           menuBtn.click();
-          setTimeout(() => { const sel = document.getElementById("l-course"); if (sel) sel.value = cid; sel.dispatchEvent(new Event("change")); }, 100);
+          setTimeout(() => { const sel = document.getElementById("l-course"); if (sel) { sel.value = cid; sel.dispatchEvent(new Event("change")); } }, 100);
         });
       });
       makeDropZone("dz-course-img", "c-img", "image/*");
@@ -275,7 +276,7 @@
       panel.innerHTML = `
         <div class="panel-title">${t("lessonsAdmin")}</div>
         <div class="form-group"><label>${t("chooseCourse")}</label><select id="l-course">
-          ${allCourses.map(c => `<option value="${c.id}">${c.title}</option>`).join("")}
+          ${allCourses.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("")}
         </select></div>
         <div class="admin-form">
           <h4>${t("addLesson")}</h4>
@@ -323,8 +324,8 @@
         document.getElementById("l-list").innerHTML = course.lessons.map(l => `
           <div class="admin-row">
             <div>
-              <div class="ar-title">${l.position + 1}. ${l.title}</div>
-              <div class="ar-sub">⏱ ${l.duration_min} ${t("min")}${l.video_url ? " · 🎬 " + t("videoYes") : ""}${l.image_url ? " · 🖼 " + t("imageYes") : ""}${l.quiz && l.quiz.length ? " · 📝 " + t("quizQuestionsCount") + ": " + l.quiz.length : ""}</div>
+              <div class="ar-title">${l.position + 1}. ${escapeHtml(l.title)}</div>
+              <div class="ar-sub">⏱ ${l.duration_min || 0} ${t("min")}${l.video_url ? " · 🎬 " + t("videoYes") : ""}${l.image_url ? " · 🖼 " + t("imageYes") : ""}${l.quiz && l.quiz.length ? " · 📝 " + t("quizQuestionsCount") + ": " + l.quiz.length : ""}</div>
             </div>
             <div class="ar-actions"><button class="btn btn-danger btn-sm" data-del="${l.id}">${t("delete")}</button></div>
           </div>`).join("") || `<div class="empty">${t("lessonNo")}</div>`;
@@ -440,7 +441,7 @@
       panel.innerHTML = `
         <div class="panel-title">${t("mediaTitle")}</div>
         <div class="form-group"><label>${t("chooseCourse")}</label><select id="m-course">
-          ${allCourses.map(c => `<option value="${c.id}">${c.title}</option>`).join("")}
+          ${allCourses.map(c => `<option value="${c.id}">${escapeHtml(c.title)}</option>`).join("")}
         </select></div>
         <div class="drop-zone" id="dz-media">
           <div class="dz-text">🎞 ${t("dragMediaMulti")}</div>
@@ -551,8 +552,8 @@
         ${allCategories.map(c => `
           <div class="admin-row">
             <div>
-              <div class="ar-title">${c.name}</div>
-              <div class="ar-sub">${c.description || ""}</div>
+              <div class="ar-title">${escapeHtml(c.name)}</div>
+              <div class="ar-sub">${escapeHtml(c.description) || ""}</div>
             </div>
             <div class="ar-actions"><button class="btn btn-danger btn-sm" data-del="${c.id}">${t("delete")}</button></div>
           </div>`).join("")}
@@ -582,11 +583,11 @@
         ${payments.map(p => `
           <div class="admin-row">
             <div>
-              <div class="ar-title">${p.course_title} <span class="badge badge-paid">${t("paid")}</span></div>
-              <div class="ar-sub">${t("payUser")}: ${p.user_name} · ${t("payMethod")}: ${p.method === "card" ? "💳 " + p.card_last4 : p.method} · ${new Date(p.created_at).toLocaleString(lang === "ru" ? "ru-RU" : "en-US")}</div>
+              <div class="ar-title">${escapeHtml(p.course_title)} <span class="badge badge-paid">${t("paid")}</span></div>
+              <div class="ar-sub">${t("payUser")}: ${escapeHtml(p.user_name)} · ${t("payMethod")}: ${p.method === "card" ? "💳 " + escapeHtml(p.card_last4) : escapeHtml(p.method)} · ${new Date(p.created_at).toLocaleString(lang === "ru" ? "ru-RU" : "en-US")}</div>
             </div>
             <div class="ar-actions">
-              <div style="font-weight:700;color:var(--accent);margin-right:10px">${p.amount} ₽</div>
+              <div style="font-weight:700;color:var(--accent);margin-right:10px">${fmtPrice(p.amount)}</div>
               <button class="btn btn-danger btn-sm" data-pdel="${p.id}">${t("delete")}</button>
             </div>
           </div>`).join("") || `<div class="empty">${t("payments")} —</div>`}
@@ -606,11 +607,11 @@
         ${users.map(u => `
           <div class="admin-row">
             <div>
-              <div class="ar-title">${u.name} <span class="badge ${u.role === "admin" ? "badge-admin" : "badge-user"}">${u.role === "admin" ? t("adminBadge") : t("userBadge")}</span>${u.id === me.id ? ` <span class="badge badge-self">${t("you")}</span>` : ""}</div>
-              <div class="ar-sub">${u.email} · ${u.courses_count || 0} ${t("coursesCount")} · ${t("userRegistered")} ${new Date(u.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}</div>
+              <div class="ar-title">${escapeHtml(u.name)} <span class="badge ${u.role === "admin" ? "badge-admin" : "badge-user"}">${u.role === "admin" ? t("adminBadge") : t("userBadge")}</span>${u.id === me.id ? ` <span class="badge badge-self">${t("you")}</span>` : ""}</div>
+              <div class="ar-sub">${escapeHtml(u.email)} · ${u.courses_count || 0} ${t("coursesCount")} · ${t("userRegistered")} ${new Date(u.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}</div>
               ${u.courses && u.courses.length
                 ? `<div class="ar-sub ar-courses">${t("enrolledCourses")}: ${u.courses.map(c =>
-                    `<span class="badge badge-user">${c.title} <button class="btn btn-danger btn-xs" data-erem="${u.id}" data-cid="${c.id}" title="${t("removeCourse")}">✕</button></span>`
+                    `<span class="badge badge-user">${escapeHtml(c.title)} <button class="btn btn-danger btn-xs" data-erem="${u.id}" data-cid="${c.id}" title="${t("removeCourse")}">✕</button></span>`
                   ).join(" ")}</div>`
                 : `<div class="ar-sub ar-courses ar-empty">${t("noCourses")}</div>`}
             </div>

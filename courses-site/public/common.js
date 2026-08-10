@@ -6,6 +6,22 @@ function t(key) {
   return dict[key] ?? TRANSLATIONS.ru[key] ?? key;
 }
 
+function pluralLessons(n) {
+  const k = Math.abs(Number(n) || 0) % 100;
+  if (k >= 11 && k <= 19) return t("lessonsWord5");
+  const m = k % 10;
+  if (lang === "ru") {
+    if (m === 1) return t("lessonsWord1");
+    if (m >= 2 && m <= 4) return t("lessonsWord2");
+    return t("lessonsWord5");
+  }
+  return t("lessonsWord");
+}
+
+function courseCover(c) {
+  return escapeHtml(c.image_url || "/uploads/course-default.svg");
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -67,7 +83,7 @@ function renderNav() {
         ${langBtn}
         ${adminLink}
         <a class="nav-btn" href="profile.html" data-i18n="myCourses">${t("myCourses")}</a>
-        <span class="nav-user">👤 ${user.name}</span>
+        <span class="nav-user">👤 ${escapeHtml(user.name)}</span>
         <a class="nav-btn" href="#" id="logout-btn" data-i18n="logout">${t("logout")}</a>`;
       document.getElementById("logout-btn").addEventListener("click", async (e) => {
         e.preventDefault();
@@ -82,7 +98,26 @@ function renderNav() {
         <a class="nav-btn" href="login.html" data-i18n="login">${t("login")}</a>`;
     }
     wireNavButtons();
+    wireNavToggle();
   });
+}
+
+function wireNavToggle() {
+  const toggle = document.getElementById("nav-toggle");
+  const nav = document.getElementById("nav-links");
+  if (!toggle || !nav) return;
+  toggle.classList.remove("active");
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.addEventListener("click", () => {
+    const isOpen = nav.classList.toggle("open");
+    toggle.classList.toggle("active", isOpen);
+    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  });
+  nav.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
+    nav.classList.remove("open");
+    toggle.classList.remove("active");
+    toggle.setAttribute("aria-expanded", "false");
+  }));
 }
 
 function wireNavButtons() {
@@ -105,8 +140,9 @@ function showError(el, msg) {
 
 async function apiFetch(url, options = {}) {
   const res = await fetch(url, options);
-  const data = await res.json();
-  if (!res.ok) throw new Error(translateError(data.error) || "Error");
+  let data = {};
+  try { data = await res.json(); } catch { data = {}; }
+  if (!res.ok) throw new Error(translateError(data.error) || `HTTP ${res.status}`);
   return data;
 }
 

@@ -50,6 +50,16 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .navbar a.nav-btn:hover { color: var(--text); background: var(--border); }
 .navbar .nav-user { color: var(--accent); font-size: 14px; }
 
+.nav-toggle {
+  display: none; flex-direction: column; justify-content: center; gap: 5px;
+  width: 40px; height: 40px; padding: 9px; background: transparent;
+  border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.nav-toggle span { display: block; height: 2px; background: var(--text-dim); border-radius: 2px; transition: all .25s; }
+.nav-toggle.active span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-toggle.active span:nth-child(2) { opacity: 0; }
+.nav-toggle.active span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
 .icon-btn {
   background: transparent; border: 1px solid var(--border); border-radius: 8px;
   color: var(--text-dim); font-size: 15px; cursor: pointer; padding: 7px 10px; transition: all .2s;
@@ -124,6 +134,10 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .lesson-item .lesson-title { font-size: 14px; color: var(--text); }
 .lesson-item .lesson-dur { font-size: 12px; color: var(--text-faint); }
 .lesson-item .lesson-status { color: var(--success); font-size: 14px; }
+.lesson-item.locked { cursor: not-allowed; opacity: 0.75; }
+.lesson-item.locked:hover { border-color: var(--border); }
+.lesson-item.locked .lesson-status { color: var(--text-faint); }
+.badge-free { background: var(--success); color: #fff; margin-left: 6px; vertical-align: middle; }
 
 .lesson-view { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-top: 24px; }
 .lesson-view h3 { margin-bottom: 12px; color: var(--text); }
@@ -343,4 +357,78 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
   .enroll-card { position: static; }
   .admin-layout { grid-template-columns: 1fr; }
   .navbar { padding: 10px 16px; }
+  .card-inputs { grid-template-columns: 1fr; }
+  .form-actions { flex-wrap: wrap; }
+  .lesson-actions { flex-wrap: wrap; }
+  .quiz-tools { flex-wrap: wrap; }
+  .admin-row { flex-wrap: wrap; }
+  .admin-row .ar-actions { flex-wrap: wrap; }
+  .modal { padding: 20px; }
+  .courses-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .container { padding: 20px 16px 50px; }
+  .page-title { font-size: 22px; }
+  .course-hero h1 { font-size: 24px; }
+  .course-card img { height: 150px; }
+  .media-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .my-card { flex-wrap: wrap; }
+  .my-card .mc-progress { margin-left: 0; width: 100%; text-align: left; }
+  .progress-track { width: 100%; }
+  .drop-zone { padding: 16px 12px; }
+  .pf-row { flex-wrap: wrap; }
+  .lesson-view { padding: 18px; }
+  .enroll-card .btn { margin-bottom: 8px; }
+}
+
+@media (max-width: 600px) {
+  .nav-toggle { display: flex; }
+  .navbar { padding: 10px 14px; }
+  .navbar .nav-links {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 4px;
+    background: var(--bg-soft); border-bottom: 1px solid var(--border);
+    padding: 10px 14px 16px; box-shadow: 0 12px 24px rgba(0,0,0,.35);
+  }
+  .navbar .nav-links.open { display: flex; }
+  .navbar .nav-links .icon-btn { align-self: flex-start; }
+  .navbar a.nav-btn, .navbar .nav-user { padding: 10px 6px; border-radius: 6px; }
+  .navbar .nav-user { font-size: 14px; }
+
+  .container { padding: 16px 12px 40px; }
+  .page-title { font-size: 20px; margin-bottom: 16px; }
+  .courses-grid { grid-template-columns: 1fr; gap: 14px; }
+  .course-card img { height: 170px; }
+
+  .course-detail-grid { gap: 16px; }
+  .course-hero h1 { font-size: 21px; }
+  .course-hero img { max-height: 220px; }
+  .enroll-card .price { font-size: 26px; }
+  .lesson-item { padding: 12px 14px; }
+  .lesson-item .lesson-title { font-size: 13px; }
+  .lesson-view { padding: 16px; }
+  .lesson-view h3 { font-size: 18px; }
+
+  .review-item, .admin-row, .quiz-preview-item { padding: 12px 14px; }
+  .admin-form, .card { padding: 16px; }
+  .modal { padding: 18px; max-height: 92vh; }
+
+  .my-card { gap: 12px; padding: 12px; }
+  .my-card img { width: 76px; height: 52px; }
+  .mc-progress .pct { font-size: 14px; }
+
+  .quiz-opt { font-size: 13px; padding: 7px 10px; }
+  .btn { width: 100%; text-align: center; }
+  .form-actions .btn, .lesson-actions .btn, .ar-actions .btn, .quiz-tools .btn, .media-actions .btn { width: auto; flex: 1 1 45%; }
+  .media-actions { flex-wrap: wrap; gap: 8px; }
+
+  .video-wrap, .mg-track { aspect-ratio: 4 / 3; }
+  .mg-nav { width: 34px; height: 34px; font-size: 18px; }
+  .mg-prev { left: 6px; }
+  .mg-next { right: 6px; }
+  .secure-note { font-size: 11px; }
+}
+
+@media (max-width: 380px) {
+  .navbar .logo { font-size: 17px; }
+  .course-title { font-size: 15px; }
+  .badge-free { display: inline-block; margin-top: 4px; margin-left: 0; }
 }

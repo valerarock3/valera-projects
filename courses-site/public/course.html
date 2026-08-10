@@ -10,6 +10,7 @@
   <nav class="navbar">
     <a href="index.html" class="logo">🎓 Курсы</a>
     <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </nav>
 
   <div class="container" id="course-container"><div class="loading">Загрузка курса...</div></div>
@@ -42,6 +43,7 @@
 
     function renderCourse() {
       const container = document.getElementById("course-container");
+      const canAccess = !!course.enrolled || !!course.isAdmin;
       const avg = course.reviews.length
         ? (course.reviews.reduce((s, r) => s + r.rating, 0) / course.reviews.length).toFixed(1)
         : "—";
@@ -51,29 +53,32 @@
         <div class="course-detail-grid mt-16">
           <div class="course-hero">
             ${heroMediaHtml(course)}
-            <div class="cat">${course.category_name || t("noCategory")}</div>
-            <h1>${course.title}</h1>
-            <div class="desc">${course.description || ""}</div>
-            <div class="instructor">${t("instructor")}: ${course.instructor || "—"} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length})</div>
+            <div class="cat">${escapeHtml(course.category_name) || t("noCategory")}</div>
+            <h1>${escapeHtml(course.title)}</h1>
+            <div class="desc">${escapeHtml(course.description || "")}</div>
+            <div class="instructor">${t("instructor")}: ${escapeHtml(course.instructor) || "—"} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length})</div>
 
             <div class="lesson-list">
               <h3 class="page-title" style="font-size:20px">${t("lessons")} (${course.lessons.length})</h3>
-              ${course.lessons.map(l => `
-                <div class="lesson-item ${course.enrolled ? "" : "hidden"}" data-lesson="${l.id}">
+              ${course.lessons.map(l => {
+                const open = canAccess || l.position === 0;
+                return `
+                <div class="lesson-item ${open ? "" : "locked"}" data-lesson="${l.id}" data-open="${open ? "1" : "0"}">
                   <div>
-                    <div class="lesson-title">${l.position + 1}. ${l.title}</div>
+                    <div class="lesson-title">${l.position + 1}. ${escapeHtml(l.title)}${l.position === 0 ? ` <span class="badge badge-free">${t("demoLesson")}</span>` : ""}</div>
                     <div class="lesson-dur">⏱ ${l.duration_min} ${t("min")}</div>
                   </div>
-                  <span class="lesson-status">▶</span>
-                </div>`).join("")}
-              ${course.enrolled ? "" : `<div class="empty" id="lessons-locked">${t("lessonsLocked")}</div>`}
+                  <span class="lesson-status">${open ? "▶" : "🔒"}</span>
+                </div>`;
+              }).join("")}
+              ${canAccess ? "" : `<div class="empty" id="lessons-locked">${t("demoNote")}</div>`}
             </div>
 
             <div id="lesson-view"></div>
 
             <div class="reviews">
               <h3 class="page-title" style="font-size:20px">${t("reviews")} (${course.reviews.length})</h3>
-              ${course.enrolled ? `
+              ${canAccess ? `
                 <div class="card mt-16">
                   <h4 style="margin-bottom:12px">${t("leaveReview")}</h4>
                   <div class="form-group">
@@ -95,8 +100,8 @@
               ${course.reviews.map(r => `
                 <div class="review-item">
                   <span class="stars">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span>
-                  <span class="ruser"> ${r.name}</span>
-                  <div class="rtext">${r.comment || ""}</div>
+                  <span class="ruser"> ${escapeHtml(r.name)}</span>
+                  <div class="rtext">${nl2br(r.comment || "")}</div>
                 </div>`).join("") || `<div class="empty">${t("noReviews")}</div>`}
             </div>
           </div>
@@ -104,13 +109,12 @@
           <div class="enroll-card card">
             <div class="price">${fmtPrice(course.price)}</div>
             ${course.enrolled
-              ? `<div style="text-align:center;color:var(--success);font-weight:600;margin-bottom:12px">${t("enrolled")}<br><span style="font-size:13px;color:var(--text-faint)">${t("progress")}: ${course.progress}%</span></div>`
-              : `${Number(course.price) > 0
-                  ? `<button class="btn btn-primary" id="enroll-btn" data-i18n="enrollBtn">Записаться на курс</button>`
-                  : `<button class="btn btn-primary" id="enroll-btn" data-i18n="enrollBtn">Записаться на курс</button>`}
+              ? `<div style="text-align:center;color:var(--success);font-weight:600;margin-bottom:12px">${t("enrolled")}<br><span style="font-size:13px;color:var(--text-faint)">${t("progress")}: ${course.progress}%</span></div>
+                 ${course.progress >= 100 ? `<a class="btn btn-primary" style="width:100%;margin-bottom:12px" href="/api/certificate/${courseId}">${t("certificate")}</a>` : ""}`
+              : `<button class="btn btn-primary" id="enroll-btn" data-i18n="enrollBtn">Записаться на курс</button>
                  <button class="btn btn-outline" id="no-account-btn" data-i18n="createAccount">Создать аккаунт</button>`}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint)">
-              📊 ${course.lessons.length} ${t("lessonsWord")}<br>${t("instructor")}: ${course.instructor || "—"}<br>🗂 ${course.category_name || t("noCategory")}
+              📊 ${course.lessons.length} ${pluralLessons(course.lessons.length)}<br>${t("instructor")}: ${escapeHtml(course.instructor) || "—"}<br>🗂 ${escapeHtml(course.category_name) || t("noCategory")}
             </div>
           </div>
         </div>
@@ -122,7 +126,15 @@
       document.getElementById("no-account-btn")?.addEventListener("click", () => location.href = "register.html");
 
       document.querySelectorAll(".lesson-item").forEach(item => {
-        item.addEventListener("click", () => showLesson(Number(item.dataset.lesson)));
+        item.addEventListener("click", () => {
+          if (item.dataset.open !== "1") {
+            if (!me) { window.location.href = "login.html"; return; }
+            alert(t("demoLocked"));
+            document.getElementById("enroll-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          showLesson(Number(item.dataset.lesson));
+        });
       });
 
       document.getElementById("review-btn")?.addEventListener("click", async () => {
@@ -143,8 +155,7 @@
         openPayModal();
       } else {
         await apiFetch(`/api/courses/${courseId}/enroll`, { method: "POST" });
-        course.enrolled = true;
-        renderCourse();
+        await loadCourse();
       }
     }
 
@@ -154,7 +165,7 @@
       const body = document.getElementById("pay-body");
       body.innerHTML = `
         <div class="pay-summary">
-          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${course.title}</span></div>
+          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
           <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
           <div class="ps-amount">${fmtPrice(course.price)}</div>
         </div>
@@ -223,7 +234,7 @@
       const body = document.getElementById("pay-body");
       body.innerHTML = `
         <div class="pay-summary">
-          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${course.title}</span></div>
+          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
           <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
           <div class="ps-amount">${fmtPrice(course.price)}</div>
         </div>
@@ -270,10 +281,9 @@
         });
         body.innerHTML = `<div class="pay-status"><div class="ps-icon">✅</div><div class="ps-text" data-i18n="paySuccess">Оплата прошла успешно!</div></div>`;
         applyI18n();
-        course.enrolled = true;
-        setTimeout(() => {
+        setTimeout(async () => {
           document.getElementById("pay-modal").classList.add("hidden");
-          renderCourse();
+          await loadCourse();
         }, 1200);
       } catch (err) {
         body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${err.message}</div></div>`;
@@ -306,7 +316,7 @@
             <div class="mg-count"><span class="mg-cur">1</span>/${media.length}</div>
           </div>`;
       }
-      return `<img class="course-cover" src="${c.image_url || "https://picsum.photos/seed/c" + c.id + "/800/360"}" alt="">`;
+      return `<img class="course-cover" src="${courseCover(c)}" alt="">`;
     }
 
     function setupGallery() {
@@ -354,6 +364,7 @@
       if (!lesson) return;
       const view = document.getElementById("lesson-view");
       currentQuiz = lesson.quiz || [];
+      const fullAccess = !!course.enrolled || !!course.isAdmin;
       view.innerHTML = `
         <div class="lesson-view">
           <h3>${lesson.position + 1}. ${escapeHtml(lesson.title)}</h3>
@@ -362,22 +373,31 @@
           <div class="lesson-text">${nl2br(lesson.content)}</div>
           ${lesson.quiz && lesson.quiz.length ? renderQuiz(lesson.quiz) : ""}
           <div class="lesson-actions">
-            <button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>
-            <button class="btn btn-outline" id="download-btn">⬇ ${t("downloadLesson")}</button>
+            ${fullAccess
+              ? `<button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>
+                 <button class="btn btn-outline" id="download-btn">⬇ ${t("downloadLesson")}</button>`
+              : `<button class="btn btn-primary" id="full-access-btn">${t("fullAccess")}</button>`}
           </div>
         </div>`;
       view.scrollIntoView({ behavior: "smooth", block: "start" });
       setupQuiz();
-      document.getElementById("download-btn").addEventListener("click", () => {
+      const downloadBtn = document.getElementById("download-btn");
+      if (downloadBtn) downloadBtn.addEventListener("click", () => {
         window.location.href = `/api/courses/${courseId}/lessons/${lessonId}/download`;
       });
-      document.getElementById("complete-btn").addEventListener("click", async () => {
+      const completeBtn = document.getElementById("complete-btn");
+      if (completeBtn) completeBtn.addEventListener("click", async () => {
         const data = await apiFetch(`/api/courses/${courseId}/progress`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ lessonId }),
         });
         course.progress = data.progress;
         renderCourse();
+      });
+      const fullAccessBtn = document.getElementById("full-access-btn");
+      if (fullAccessBtn) fullAccessBtn.addEventListener("click", () => {
+        if (!me) { window.location.href = "login.html"; return; }
+        document.getElementById("enroll-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
 

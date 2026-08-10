@@ -4,6 +4,8 @@ const fs = require("fs");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
+const PDFDocument = require("pdfkit");
+const swaggerUi = require("swagger-ui-express");
 const { pool, initSchema } = require("./db");
 
 const app = express();
@@ -18,6 +20,12 @@ app.use("/uploads", (req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, "public")));
+
+const swaggerDocument = JSON.parse(fs.readFileSync(path.join(__dirname, "swagger.json"), "utf8"));
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
+  customSiteTitle: "API — Платформа курсов",
+  customCss: ".swagger-ui .topbar { display: none; }",
+}));
 
 app.use(session({
   secret: "courses_secret_key_2026",
@@ -73,9 +81,10 @@ function requireAdmin(req, res, next) {
 }
 
 function getMediaType(url) {
-  const ext = (url || "").split("?")[0].toLowerCase();
-  if (/\.(mp4|webm|mov|mkv|avi|m4v|ogv)$/.test(ext)) return "video";
-  if (/\.(mp3|wav|m4a|aac|oga|flac|ogg)$/.test(ext)) return "audio";
+  const clean = (url || "").split("?")[0].toLowerCase();
+  if (/\.(mp4|webm|mov|mkv|avi|m4v|ogv)$/.test(clean)) return "video";
+  if (/\.(mp3|wav|m4a|aac|oga|flac|ogg)$/.test(clean)) return "audio";
+  if (/(youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/.test(url || "")) return "video";
   return "image";
 }
 
@@ -135,7 +144,7 @@ function buildLessonHtml(lesson, quiz, base) {
 </style>
 </head>
 <body>
-  <div class="meta">${escapeHtmlFile(lesson.course_title)} · Урок ${lesson.position + 1} · ⏱ ${lesson.duration_min} мин</div>
+  <div class="meta">${escapeHtmlFile(lesson.course_title)} · Урок ${lesson.position + 1} · ⏱ ${lesson.duration_min || 0} мин</div>
   <h1>${escapeHtmlFile(lesson.title)}</h1>
   ${img}
   ${media}
@@ -262,10 +271,10 @@ app.get("/api/courses/:id", async (req, res) => {
     }
     const isAdmin = req.session.user && req.session.user.role === "admin";
     const showContent = enrolled || isAdmin;
-    const parsedLessons = lessons.map(l => showContent
+    const parsedLessons = lessons.map(l => (showContent || l.position === 0)
       ? { ...l, quiz: parseQuiz(l.quiz) }
       : { id: l.id, title: l.title, position: l.position, duration_min: l.duration_min });
-    res.json({ ...course, lessons: parsedLessons, reviews, media, enrolled, progress });
+    res.json({ ...course, lessons: parsedLessons, reviews, media, enrolled, progress, isAdmin });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -448,6 +457,67 @@ app.get("/api/my", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+const CERT_FONT = "C:/Windows/Fonts/arial.ttf";
+
+function makeCertificatePDF(userName, courseTitle) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ size: "A4", layout: "landscape", margin: 0 });
+      const chunks = [];
+      doc.on("data", (c) => chunks.push(c));
+      doc.on("end", () => resolve(Buffer.concat(chunks)));
+      doc.on("error", reject);
+
+      const W = doc.page.width;
+      const H = doc.page.height;
+      const gold = "#b8860b";
+      const dark = "#1b2634";
+
+      doc.rect(18, 18, W - 36, H - 36).lineWidth(2).strokeColor(gold).stroke();
+      doc.rect(24, 24, W - 48, H - 48).lineWidth(0.8).strokeColor(gold).stroke();
+
+      doc.registerFont("Main", CERT_FONT);
+      doc.font("Main").fontSize(34).fillColor(gold).text("СЕРТИФИКАТ", 0, 70, { align: "center", width: W });
+      doc.font("Main").fontSize(15).fillColor(dark).text("об успешном завершении курса", 0, 128, { align: "center", width: W });
+
+      doc.moveTo(90, 175).lineTo(W - 90, 175).lineWidth(1).strokeColor(gold).stroke();
+
+      doc.font("Main").fontSize(16).fillColor(dark).text("Настоящим подтверждается, что", 0, 205, { align: "center", width: W });
+
+      doc.font("Main").fontSize(40).fillColor("#0d1520").text(userName, 0, 250, { align: "center", width: W });
+      doc.moveTo(150, 315).lineTo(W - 150, 315).lineWidth(0.8).strokeColor("#9aa7b8").stroke();
+
+      doc.font("Main").fontSize(17).fillColor(dark).text("успешно завершил(а) курс", 0, 340, { align: "center", width: W });
+      doc.font("Main").fontSize(24).fillColor(gold).text(courseTitle, 0, 375, { align: "center", width: W });
+
+      const dateStr = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
+      doc.font("Main").fontSize(13).fillColor("#5c6b7d").text(dateStr, 0, 440, { align: "center", width: W });
+
+      doc.font("Main").fontSize(12).fillColor("#7d8da0").text("Платформа онлайн-курсов «Курсы»", 0, 500, { align: "center", width: W });
+
+      doc.end();
+    } catch (err) { reject(err); }
+  });
+}
+
+app.get("/api/certificate/:courseId", requireAuth, async (req, res) => {
+  try {
+    const [enr] = await pool.query(
+      "SELECT progress FROM enrollments WHERE user_id = ? AND course_id = ?",
+      [req.session.user.id, req.params.courseId]
+    );
+    if (!enr.length) return res.status(403).json({ error: "Сначала оплатите и запишитесь на курс" });
+    if (Number(enr[0].progress) < 100) return res.status(403).json({ error: "Курс не завершён" });
+    const [courses] = await pool.query("SELECT title FROM courses WHERE id = ?", [req.params.courseId]);
+    if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
+    const [users] = await pool.query("SELECT name FROM users WHERE id = ?", [req.session.user.id]);
+    const pdf = await makeCertificatePDF(users[0].name, courses[0].title);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="certificate-${req.params.courseId}.pdf"`);
+    res.send(pdf);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/admin/users", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query(
@@ -485,6 +555,15 @@ app.post("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
   const { role } = req.body;
   if (!["user", "admin"].includes(role)) return res.status(400).json({ error: "Некорректная роль" });
   try {
+    const [rows] = await pool.query("SELECT role FROM users WHERE id = ?", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Пользователь не найден" });
+    if (Number(req.params.id) === req.session.user.id && role !== "admin") {
+      return res.status(400).json({ error: "Нельзя понизить самого себя" });
+    }
+    if (rows[0].role === "admin" && role !== "admin") {
+      const [admins] = await pool.query("SELECT COUNT(*) AS c FROM users WHERE role = 'admin'");
+      if (Number(admins[0].c) <= 1) return res.status(400).json({ error: "Нельзя понизить последнего администратора" });
+    }
     await pool.query("UPDATE users SET role = ? WHERE id = ?", [role, req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -605,11 +684,11 @@ async function seed() {
   const [cat4] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Маркетинг", "Digital-маркетинг, SEO и SMM"]);
 
   const base = [
-    { c: cat1.insertId, t: "JavaScript с нуля", d: "Полный курс по JavaScript: от переменных до промисов и асинхронности.", p: 3490, i: "Иван Петров", img: "https://picsum.photos/seed/js/400/220" },
-    { c: cat1.insertId, t: "Python для анализа данных", d: "Pandas, NumPy и визуализация данных на практике.", p: 4990, i: "Мария Смирнова", img: "https://picsum.photos/seed/py/400/220" },
-    { c: cat2.insertId, t: "Инвестиции для начинающих", d: "Как составить портфель, читать графики и не терять деньги.", p: 2990, i: "Алексей Волков", img: "https://picsum.photos/seed/fin/400/220" },
-    { c: cat3.insertId, t: "Основы UI/UX-дизайна", d: "Проектирование интерфейсов: сетки, типографика, прототипы.", p: 5490, i: "Анна Козлова", img: "https://picsum.photos/seed/ui/400/220" },
-    { c: cat4.insertId, t: "SMM-маркетинг", d: "Продвижение в соцсетях: стратегия, контент, аналитика.", p: 2490, i: "Дмитрий Орлов", img: "https://picsum.photos/seed/smm/400/220" },
+    { c: cat1.insertId, t: "JavaScript с нуля", d: "Полный курс по JavaScript: от переменных до промисов и асинхронности.", p: 3490, i: "Иван Петров", img: "/uploads/course-js.svg" },
+    { c: cat1.insertId, t: "Python для анализа данных", d: "Pandas, NumPy и визуализация данных на практике.", p: 4990, i: "Мария Смирнова", img: "/uploads/course-python.svg" },
+    { c: cat2.insertId, t: "Инвестиции для начинающих", d: "Как составить портфель, читать графики и не терять деньги.", p: 2990, i: "Алексей Волков", img: "/uploads/course-finance.svg" },
+    { c: cat3.insertId, t: "Основы UI/UX-дизайна", d: "Проектирование интерфейсов: сетки, типографика, прототипы.", p: 5490, i: "Анна Козлова", img: "/uploads/course-uiux.svg" },
+    { c: cat4.insertId, t: "SMM-маркетинг", d: "Продвижение в соцсетях: стратегия, контент, аналитика.", p: 2490, i: "Дмитрий Орлов", img: "/uploads/course-smm.svg" },
   ];
   for (const b of base) {
     await pool.query("INSERT INTO courses (category_id, title, description, price, instructor, image_url) VALUES (?, ?, ?, ?, ?, ?)", [b.c, b.t, b.d, b.p, b.i, b.img]);

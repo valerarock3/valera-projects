@@ -10,6 +10,7 @@
   <nav class="navbar">
     <a href="index.html" class="logo">🎓 Курсы</a>
     <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
   </nav>
 
   <div class="container">
@@ -20,37 +21,29 @@
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
-    function pluralLessons(n) {
-      const k = Math.abs(n) % 100;
-      if (k >= 11 && k <= 19) return t("lessonsWord5");
-      const m = k % 10;
-      if (lang === "ru") {
-        if (m === 1) return t("lessonsWord1");
-        if (m >= 2 && m <= 4) return t("lessonsWord2");
-        return t("lessonsWord5");
-      }
-      return t("lessonsWord");
-    }
-
     async function loadCourses() {
       const grid = document.getElementById("courses-grid");
       grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
-      const data = await apiFetch("/api/courses");
-      if (!data.length) { grid.innerHTML = `<div class="empty">${t("notFound")}</div>`; return; }
-      grid.innerHTML = data.map(c => `
-        <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
-          <img src="${c.image_url || "https://picsum.photos/seed/c${c.id}/400/220"}" alt="">
-          <div class="course-body">
-            <div class="course-cat">${c.category_name || t("noCategory")}</div>
-            <div class="course-title">${c.title}</div>
-            <div class="course-desc">${(c.description || "").slice(0, 90)}</div>
-            <div class="course-meta">
-              <span class="course-price">${fmtPrice(c.price)}</span>
-              <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
+      try {
+        const data = await apiFetch("/api/courses");
+        if (!data.length) { grid.innerHTML = `<div class="empty">${t("notFound")}</div>`; return; }
+        grid.innerHTML = data.map(c => `
+          <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
+            <img src="${courseCover(c)}" alt="">
+            <div class="course-body">
+              <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
+              <div class="course-title">${escapeHtml(c.title)}</div>
+              <div class="course-desc">${escapeHtml((c.description || "").slice(0, 90))}</div>
+              <div class="course-meta">
+                <span class="course-price">${fmtPrice(c.price)}</span>
+                <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
+              </div>
+              <div class="course-instructor">${t("instructorWord")}: ${escapeHtml(c.instructor) || "—"}</div>
             </div>
-            <div class="course-instructor">${t("instructorWord")}: ${c.instructor || "—"}</div>
-          </div>
-        </div>`).join("");
+          </div>`).join("");
+      } catch (err) {
+        grid.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      }
     }
 
     initTheme();

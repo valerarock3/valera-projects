@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a148c"/>
+      <stop offset="1" stop-color="#ce93d8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" fill="url(#g)"/>
+  
+      <g fill="#fff" opacity=".9">
+        <path d="M200 140 c-26 -14 -30 -38 -12 -50 c16 10 20 28 12 40z"/>
+        <path d="M200 140 c8 -12 4 -30 -12 -40 c18 12 14 36 -12 50z"/>
+        <path d="M200 140 c-14 -16 -10 -36 0 -46 c10 10 14 30 0 46z" opacity=".7"/>
+      </g>
+      <path d="M200 58 v26" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+      <path d="M180 70 h40" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="150" cy="110" r="6" fill="#fff" opacity=".8"/>
+      <circle cx="250" cy="110" r="6" fill="#fff" opacity=".8"/>
+  <text x="200" y="195" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="bold" fill="#ffffff" text-anchor="middle">Спа-массаж</text>
+  <text x="200" y="215" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#ffffff" opacity=".85" text-anchor="middle">и релакс-техники</text>
+</svg>

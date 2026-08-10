@@ -11,6 +11,8 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "multer": "^2.2.0",
-    "mysql2": "^3.10.0"
+    "mysql2": "^3.10.0",
+    "pdfkit": "^0.19.1",
+    "swagger-ui-express": "^5.0.1"
   }
 }

@@ -1,0 +1,18 @@
+# Папки зависимостей
+node_modules/
+
+# Данные и временные файлы MySQL
+mysql-data/
+mysql-data8/
+phpmyadmin/tmp/
+
+# Файлы конфигурации с секретами
+*.env
+.env.local
+
+# Логи
+*.log
+
+# Системное
+.DS_Store
+Thumbs.db
