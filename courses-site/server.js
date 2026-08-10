@@ -725,5 +725,8 @@ app.listen(PORT, async () => {
     console.log("Пользователь: user@courses.ru / user123");
   } catch (err) {
     console.error("Ошибка инициализации БД:", err.message);
+    if (/Unknown database/i.test(err.message)) {
+      console.error("База данных не создана. Выполните: mysql -u root -p < init_db.sql (или запустите start.bat)");
+    }
   }
 });
