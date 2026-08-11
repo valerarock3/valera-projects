@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c2477a"/>
+      <stop offset="1" stop-color="#ef7aa8"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round">
+    <circle cx="190" cy="72" r="18"/>
+    <path d="M190 90 c 0 22 -6 38 -12 52"/>
+    <path d="M190 108 c 18 6 30 20 34 44"/>
+    <path d="M178 142 c -8 20 -8 38 -2 50"/>
+    <path d="M224 152 c 4 14 0 28 -10 38"/>
+    <path d="M150 168 c -8 4 -14 12 -16 22"/>
+    <path d="M254 168 c 8 4 14 12 16 22"/>
+  </g>
+  <rect x="20" y="170" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#a13763">Детский массаж</text>
+</svg>

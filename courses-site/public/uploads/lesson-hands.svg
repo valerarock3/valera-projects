@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e7c66"/>
+      <stop offset="1" stop-color="#13a884"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round">
+    <path d="M155 118 c 0 20 16 30 45 30 c 29 0 45 -10 45 -30"/>
+    <path d="M118 108 c -7 20 4 40 28 52"/>
+    <path d="M282 108 c 7 20 -4 40 -28 52"/>
+    <path d="M155 118 c 0 10 14 16 45 16 c 31 0 45 -6 45 -16"/>
+    <path d="M118 108 c -2 -14 4 -24 14 -28"/>
+    <path d="M282 108 c 2 -14 -4 -24 -14 -28"/>
+  </g>
+  <rect x="20" y="170" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#0e7c66">Техника рук</text>
+</svg>

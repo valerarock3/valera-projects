@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a3f9e"/>
+      <stop offset="1" stop-color="#8a63c9"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g stroke="#ffffff" stroke-width="5" stroke-linecap="round">
+    <path d="M158 70 c -2 18 -2 30 0 40"/>
+    <rect x="140" y="112" width="36" height="8" rx="4" fill="none"/>
+    <circle cx="158" cy="138" r="12" fill="#ffffff" opacity="0.9"/>
+    <circle cx="158" cy="138" r="4" fill="url(#g)"/>
+    <circle cx="158" cy="168" r="6" fill="#ffffff" opacity="0.7"/>
+    <circle cx="158" cy="184" r="4" fill="#ffffff" opacity="0.5"/>
+    <circle cx="230" cy="132" r="10" fill="#ffffff" opacity="0.55"/>
+    <circle cx="272" cy="120" r="8" fill="#ffffff" opacity="0.4"/>
+    <circle cx="288" cy="160" r="7" fill="#ffffff" opacity="0.35"/>
+  </g>
+  <rect x="20" y="170" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="192" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#5a3f9e">Точки давления</text>
+</svg>
