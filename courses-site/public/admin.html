@@ -21,6 +21,7 @@
         <button data-panel="lessons">📝 <span data-i18n="lessonsAdmin">Уроки</span></button>
         <button data-panel="media">🎞 <span data-i18n="mediaTitle">Медиа</span></button>
         <button data-panel="categories">🗂 <span data-i18n="categories">Категории</span></button>
+        <button data-panel="instructors">👨‍🏫 <span data-i18n="instructors">Преподаватели</span></button>
         <button data-panel="payments">💳 <span data-i18n="payments">Оплаты</span></button>
         <button data-panel="users">👥 <span data-i18n="users">Пользователи</span></button>
       </div>
@@ -34,8 +35,10 @@
     let currentPanel = "courses";
     let allCategories = [];
     let allCourses = [];
+    let allInstructors = [];
     let me = null;
     let editingCourseId = null;
+    let editingInstructorId = null;
 
     async function checkAdmin() {
       me = await fetchMe();
@@ -64,6 +67,7 @@
       if (currentPanel === "courses") {
         allCategories = await apiFetch("/api/categories");
         allCourses = await apiFetch("/api/courses");
+        allInstructors = await apiFetch("/api/admin/instructors");
         renderCourses(panel);
       } else if (currentPanel === "lessons") {
         allCategories = await apiFetch("/api/categories");
@@ -76,10 +80,14 @@
       } else if (currentPanel === "categories") {
         allCategories = await apiFetch("/api/categories");
         renderCategories(panel);
+      } else if (currentPanel === "instructors") {
+        allInstructors = await apiFetch("/api/admin/instructors");
+        renderInstructors(panel);
       } else if (currentPanel === "payments") {
         const payments = await apiFetch("/api/admin/payments");
         renderPayments(panel, payments);
       } else if (currentPanel === "users") {
+        allCourses = await apiFetch("/api/courses");
         const users = await apiFetch("/api/admin/users");
         renderUsers(panel, users);
       }
@@ -95,7 +103,10 @@
           <div class="form-group"><label>${t("description")}</label><textarea id="c-desc"></textarea></div>
           <div class="form-group"><label>${t("price")}</label><input type="number" id="c-price" value="0"></div>
           <div class="form-group"><label>${t("category")}</label><select id="c-cat"><option value="">${t("noCategoryOpt")}</option>${allCategories.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("")}</select></div>
-          <div class="form-group"><label>${t("instructorField")}</label><input id="c-instr"></div>
+          <div class="form-group"><label>${t("instructorField")}</label><select id="c-instr">
+            <option value="">${t("noInstructor")}</option>
+            ${allInstructors.map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("")}
+          </select></div>
           <div class="form-group"><label>${t("imageUrl")}</label><input id="c-img" placeholder="https://..."></div>
           <div class="drop-zone" id="dz-course-img">
             <div class="dz-text">🖼 ${t("dragImage")}</div>
@@ -135,7 +146,8 @@
             description: document.getElementById("c-desc").value,
             price: document.getElementById("c-price").value,
             category_id: document.getElementById("c-cat").value || null,
-            instructor: document.getElementById("c-instr").value,
+            instructor_id: document.getElementById("c-instr").value ? Number(document.getElementById("c-instr").value) : null,
+            instructor: document.getElementById("c-instr").selectedOptions.length ? document.getElementById("c-instr").selectedOptions[0].text : "",
             image_url: document.getElementById("c-img").value,
           };
           let created;
@@ -191,7 +203,12 @@
           document.getElementById("c-desc").value = course.description || "";
           document.getElementById("c-price").value = course.price;
           document.getElementById("c-cat").value = course.category_id || "";
-          document.getElementById("c-instr").value = course.instructor || "";
+          if (course.instructor_id) {
+            document.getElementById("c-instr").value = course.instructor_id;
+          } else if (course.instructor) {
+            const opt = [...document.getElementById("c-instr").options].find(o => o.text === course.instructor);
+            if (opt) document.getElementById("c-instr").value = opt.value;
+          }
           document.getElementById("c-img").value = course.image_url || "";
           document.getElementById("c-cancel").classList.remove("hidden");
           document.getElementById("c-save").textContent = t("saveChanges");
@@ -577,6 +594,117 @@
       });
     }
 
+    function renderInstructors(panel) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("instructors")} (${allInstructors.length})</div>
+        <div class="admin-form">
+          <h4 id="i-form-title">${t("addInstructor")}</h4>
+          <div class="form-group"><label>${t("iName")}</label><input id="i-name"></div>
+          <div class="form-group"><label>${t("iSpecialty")}</label><input id="i-spec"></div>
+          <div class="form-group"><label>${t("iExperience")}</label><input id="i-exp"></div>
+          <div class="form-group"><label>${t("iBio")}</label><textarea id="i-bio"></textarea></div>
+          <div class="form-group"><label>${t("iAvatar")}</label><input id="i-avatar" placeholder="https://..."></div>
+          <div class="drop-zone" id="dz-instr-avatar">
+            <div class="dz-text">🖼 ${t("dragImage")}</div>
+            <div class="dz-preview"></div>
+            <div class="dz-status"></div>
+          </div>
+          <h4 style="margin-top:8px">${t("iSocials")}</h4>
+          <div class="card-inputs">
+            <div class="form-group"><label>Telegram</label><input id="i-tg" placeholder="@username"></div>
+            <div class="form-group"><label>Instagram</label><input id="i-ig" placeholder="@username"></div>
+            <div class="form-group"><label>VK</label><input id="i-vk" placeholder="vk.com/id123"></div>
+            <div class="form-group"><label>YouTube</label><input id="i-yt" placeholder="youtube.com/@channel"></div>
+            <div class="form-group"><label>WhatsApp</label><input id="i-wa" placeholder="+79991234567"></div>
+            <div class="form-group"><label>Email</label><input id="i-em" placeholder="mail@example.com"></div>
+            <div class="form-group"><label>${t("iPhone")}</label><input id="i-ph" placeholder="+79991234567"></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="i-save">${t("save")}</button>
+            <button class="btn btn-outline hidden" id="i-cancel">✕ ${t("cancel")}</button>
+          </div>
+        </div>
+        ${allInstructors.map(i => `
+          <div class="admin-row">
+            <div>
+              <div class="ar-title">${escapeHtml(i.name)} <span class="badge badge-user">${i.courses_count || 0} ${t("coursesCount")}</span></div>
+              <div class="ar-sub">${escapeHtml(i.specialty) || ""}${i.experience ? " · " + escapeHtml(i.experience) : ""}</div>
+            </div>
+            <div class="ar-actions">
+              <button class="btn btn-outline btn-sm" data-iedit="${i.id}">✏ ${t("edit")}</button>
+              <button class="btn btn-danger btn-sm" data-idel="${i.id}">${t("delete")}</button>
+            </div>
+          </div>`).join("") || `<div class="empty">${t("instructorsNone")}</div>`}
+      `;
+      document.getElementById("i-save").addEventListener("click", async () => {
+        const payload = {
+          name: document.getElementById("i-name").value,
+          specialty: document.getElementById("i-spec").value,
+          experience: document.getElementById("i-exp").value,
+          bio: document.getElementById("i-bio").value,
+          avatar: document.getElementById("i-avatar").value,
+          socials: {
+            telegram: document.getElementById("i-tg").value,
+            instagram: document.getElementById("i-ig").value,
+            vk: document.getElementById("i-vk").value,
+            youtube: document.getElementById("i-yt").value,
+            whatsapp: document.getElementById("i-wa").value,
+            email: document.getElementById("i-em").value,
+            phone: document.getElementById("i-ph").value,
+          },
+        };
+        try {
+          if (editingInstructorId) {
+            await apiFetch(`/api/admin/instructors/${editingInstructorId}`, {
+              method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+            });
+          } else {
+            await apiFetch("/api/admin/instructors", {
+              method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+            });
+          }
+          editingInstructorId = null;
+          loadPanel();
+        } catch (err) { alert(err.message); }
+      });
+      document.getElementById("i-cancel").addEventListener("click", () => { editingInstructorId = null; loadPanel(); });
+      panel.querySelectorAll("[data-iedit]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const ins = allInstructors.find(i => String(i.id) === btn.dataset.iedit);
+          if (!ins) return;
+          editingInstructorId = ins.id;
+          document.getElementById("i-form-title").textContent = t("editInstructor") + ": " + ins.name;
+          document.getElementById("i-name").value = ins.name || "";
+          document.getElementById("i-spec").value = ins.specialty || "";
+          document.getElementById("i-exp").value = ins.experience || "";
+          document.getElementById("i-bio").value = ins.bio || "";
+          document.getElementById("i-avatar").value = ins.avatar || "";
+          const s = ins.socials || {};
+          document.getElementById("i-tg").value = s.telegram || "";
+          document.getElementById("i-ig").value = s.instagram || "";
+          document.getElementById("i-vk").value = s.vk || "";
+          document.getElementById("i-yt").value = s.youtube || "";
+          document.getElementById("i-wa").value = s.whatsapp || "";
+          document.getElementById("i-em").value = s.email || "";
+          document.getElementById("i-ph").value = s.phone || "";
+          document.getElementById("i-cancel").classList.remove("hidden");
+          document.getElementById("i-save").textContent = t("saveChanges");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+      panel.querySelectorAll("[data-idel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const ins = allInstructors.find(i => String(i.id) === btn.dataset.idel);
+          if (!confirm(t("confirmDeleteInstructor") + (ins ? " " + ins.name : ""))) return;
+          try {
+            await apiFetch(`/api/admin/instructors/${btn.dataset.idel}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
+      makeDropZone("dz-instr-avatar", "i-avatar", "image/*");
+    }
+
     function renderPayments(panel, payments) {
       panel.innerHTML = `
         <div class="panel-title">${t("payments")} (${payments.length})</div>
@@ -604,6 +732,20 @@
     function renderUsers(panel, users) {
       panel.innerHTML = `
         <div class="panel-title">${t("users")} (${users.length})</div>
+        <div class="admin-form">
+          <h4>${t("addUser")}</h4>
+          <div class="form-group"><label>${t("name")}</label><input id="u-name"></div>
+          <div class="form-group"><label>${t("email")}</label><input type="email" id="u-email"></div>
+          <div class="form-group"><label>${t("phone")}</label><input type="tel" id="u-phone" placeholder="${t("phonePh")}"></div>
+          <div class="form-group"><label>${t("password")}</label><input type="password" id="u-pass"></div>
+          <div class="form-group"><label>${t("userRole")}</label><select id="u-role">
+            <option value="user">${t("userBadge")}</option>
+            <option value="admin">${t("adminBadge")}</option>
+          </select></div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="u-create">${t("createBtn")}</button>
+          </div>
+        </div>
         ${users.map(u => `
           <div class="admin-row">
             <div>
@@ -614,6 +756,14 @@
                     `<span class="badge badge-user">${escapeHtml(c.title)} <button class="btn btn-danger btn-xs" data-erem="${u.id}" data-cid="${c.id}" title="${t("removeCourse")}">✕</button></span>`
                   ).join(" ")}</div>`
                 : `<div class="ar-sub ar-courses ar-empty">${t("noCourses")}</div>`}
+              <div class="ar-add-course">
+                <select class="enroll-sel" data-uid="${u.id}" aria-label="${t("addToCourse")}">
+                  ${allCourses.filter(c => !(u.courses || []).some(uc => String(uc.id) === String(c.id))).map(c =>
+                    `<option value="${c.id}">${escapeHtml(c.title)}</option>`
+                  ).join("") || `<option value="">${t("allEnrolled")}</option>`}
+                </select>
+                <button class="btn btn-sm" data-eadd="${u.id}" title="${t("addToCourse")}">➕ ${t("addToCourseShort")}</button>
+              </div>
             </div>
             <div class="ar-actions">
               <button class="btn btn-outline btn-sm" data-role="${u.id}" data-new="${u.role === "admin" ? "user" : "admin"}">
@@ -625,6 +775,28 @@
             </div>
           </div>`).join("")}
       `;
+      document.getElementById("u-create").addEventListener("click", async () => {
+        const btn = document.getElementById("u-create");
+        btn.disabled = true;
+        try {
+          await apiFetch("/api/admin/users", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: document.getElementById("u-name").value.trim(),
+              email: document.getElementById("u-email").value.trim(),
+              phone: document.getElementById("u-phone").value.trim(),
+              password: document.getElementById("u-pass").value,
+              role: document.getElementById("u-role").value,
+            }),
+          });
+          document.getElementById("u-name").value = "";
+          document.getElementById("u-email").value = "";
+          document.getElementById("u-phone").value = "";
+          document.getElementById("u-pass").value = "";
+          loadPanel();
+        } catch (err) { alert(err.message); }
+        finally { btn.disabled = false; }
+      });
       panel.querySelectorAll("[data-role]").forEach(btn => {
         btn.addEventListener("click", async () => {
           await apiFetch(`/api/admin/users/${btn.dataset.role}/role`, {
@@ -650,6 +822,20 @@
           if (!confirm(t("confirmRemoveCourse") + " " + (target ? target.name : ""))) return;
           try {
             await apiFetch(`/api/admin/users/${btn.dataset.erem}/courses/${btn.dataset.cid}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
+      panel.querySelectorAll("[data-eadd]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const sel = panel.querySelector(`.enroll-sel[data-uid="${btn.dataset.eadd}"]`);
+          const courseId = sel && sel.value;
+          if (!courseId) return;
+          try {
+            await apiFetch(`/api/admin/users/${btn.dataset.eadd}/courses`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ courseId: Number(courseId) }),
+            });
             loadPanel();
           } catch (err) { alert(err.message); }
         });

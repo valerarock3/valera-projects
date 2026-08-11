@@ -38,7 +38,9 @@
                 <span class="course-price">${fmtPrice(c.price)}</span>
                 <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
               </div>
-              <div class="course-instructor">${t("instructorWord")}: ${escapeHtml(c.instructor) || "—"}</div>
+              <div class="course-instructor">${t("instructorWord")}: ${c.instructor_info && c.instructor_info.id
+                ? `<a class="author-link" href="author.html?id=${c.instructor_info.id}" onclick="event.stopPropagation()">${escapeHtml(c.instructor_info.name)}</a>`
+                : escapeHtml(c.instructor) || "—"}</div>
             </div>
           </div>`).join("");
       } catch (err) {

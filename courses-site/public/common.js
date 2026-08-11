@@ -106,13 +106,17 @@ function wireNavToggle() {
   const toggle = document.getElementById("nav-toggle");
   const nav = document.getElementById("nav-links");
   if (!toggle || !nav) return;
+  if (!toggle.dataset.toggleWired) {
+    toggle.dataset.toggleWired = "1";
+    toggle.addEventListener("click", () => {
+      const isOpen = nav.classList.toggle("open");
+      toggle.classList.toggle("active", isOpen);
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    });
+  }
+  nav.classList.remove("open");
   toggle.classList.remove("active");
   toggle.setAttribute("aria-expanded", "false");
-  toggle.addEventListener("click", () => {
-    const isOpen = nav.classList.toggle("open");
-    toggle.classList.toggle("active", isOpen);
-    toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  });
   nav.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
     nav.classList.remove("open");
     toggle.classList.remove("active");
@@ -150,6 +154,7 @@ function translateError(msg) {
   const map = {
     "Заполните все поля": t("fillAll"),
     "Пароль минимум 6 символов": t("passShort"),
+    "Введите корректный номер телефона": t("phoneInvalid"),
     "Email уже зарегистрирован": t("emailExists"),
     "Неверный email или пароль": t("wrongCreds"),
     "Требуется оплата": t("payFail"),
@@ -165,6 +170,15 @@ function translateError(msg) {
     "Нельзя удалить последнего администратора": t("delLastAdmin"),
     "Пользователь не найден": t("userNotFound"),
     "Сначала оплатите и запишитесь на курс": t("payFirstEnroll"),
+    "Курс не найден": t("courseNotFound"),
+    "Преподаватель не найден": t("instructorNotFound"),
+    "Урок не найден": t("lessonNotFound"),
+    "Курс не завершён": t("courseNotCompleted"),
+    "Доступ запрещён": t("accessForbidden"),
+    "Оплатите курс, чтобы смотреть видео": t("payToWatch"),
+    "Недопустимый тип файла": t("badFileType"),
+    "Файл не найден": t("fileNotFound"),
+    "Файл не загружен": t("fileNotUploaded"),
   };
   return map[msg] || msg;
 }

@@ -56,22 +56,23 @@
             <div class="cat">${escapeHtml(course.category_name) || t("noCategory")}</div>
             <h1>${escapeHtml(course.title)}</h1>
             <div class="desc">${escapeHtml(course.description || "")}</div>
-            <div class="instructor">${t("instructor")}: ${escapeHtml(course.instructor) || "—"} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length})</div>
+            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length})</div>
+            ${authorCardHtml()}
 
             <div class="lesson-list">
               <h3 class="page-title" style="font-size:20px">${t("lessons")} (${course.lessons.length})</h3>
               ${course.lessons.map(l => {
-                const open = canAccess || l.position === 0;
+                const open = canAccess;
                 return `
                 <div class="lesson-item ${open ? "" : "locked"}" data-lesson="${l.id}" data-open="${open ? "1" : "0"}">
                   <div>
-                    <div class="lesson-title">${l.position + 1}. ${escapeHtml(l.title)}${l.position === 0 ? ` <span class="badge badge-free">${t("demoLesson")}</span>` : ""}</div>
+                    <div class="lesson-title">${l.position + 1}. ${escapeHtml(l.title)}</div>
                     <div class="lesson-dur">⏱ ${l.duration_min} ${t("min")}</div>
                   </div>
                   <span class="lesson-status">${open ? "▶" : "🔒"}</span>
                 </div>`;
               }).join("")}
-              ${canAccess ? "" : `<div class="empty" id="lessons-locked">${t("demoNote")}</div>`}
+              ${canAccess ? "" : `<div class="empty" id="lessons-locked">${t("lessonsLocked")}</div>`}
             </div>
 
             <div id="lesson-view"></div>
@@ -114,7 +115,7 @@
               : `<button class="btn btn-primary" id="enroll-btn" data-i18n="enrollBtn">Записаться на курс</button>
                  <button class="btn btn-outline" id="no-account-btn" data-i18n="createAccount">Создать аккаунт</button>`}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint)">
-              📊 ${course.lessons.length} ${pluralLessons(course.lessons.length)}<br>${t("instructor")}: ${escapeHtml(course.instructor) || "—"}<br>🗂 ${escapeHtml(course.category_name) || t("noCategory")}
+              📊 ${course.lessons.length} ${pluralLessons(course.lessons.length)}<br>${t("instructor")}: ${instructorLinkHtml()}<br>🗂 ${escapeHtml(course.category_name) || t("noCategory")}
             </div>
           </div>
         </div>
@@ -149,6 +150,27 @@
       });
     }
 
+    function instructorLinkHtml() {
+      const info = course.instructor_info;
+      if (!info || !info.id) return escapeHtml(course.instructor) || "—";
+      return `<a class="author-link" href="author.html?id=${info.id}">${escapeHtml(info.name)}</a>`;
+    }
+
+    function authorCardHtml() {
+      const info = course.instructor_info;
+      if (!info || !info.id) return "";
+      return `
+        <div class="author-card card">
+          <img src="${escapeHtml(info.avatar || "/uploads/course-default.svg")}" alt="">
+          <div class="ac-body">
+            <div class="ac-label">${t("aboutAuthor")}</div>
+            <div class="ac-name"><a class="author-link" href="author.html?id=${info.id}">${escapeHtml(info.name)}</a></div>
+            ${info.specialty ? `<div class="ac-spec">${escapeHtml(info.specialty)}</div>` : ""}
+            <a class="btn btn-outline btn-sm" href="author.html?id=${info.id}">${t("viewAuthorProfile")} →</a>
+          </div>
+        </div>`;
+    }
+
     async function startEnroll() {
       if (!me) { window.location.href = "login.html"; return; }
       if (Number(course.price) > 0) {
@@ -158,6 +180,8 @@
         await loadCourse();
       }
     }
+
+    let currentQr = null;
 
     function openPayModal() {
       const modal = document.getElementById("pay-modal");
@@ -169,68 +193,42 @@
           <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
           <div class="ps-amount">${fmtPrice(course.price)}</div>
         </div>
-        <div id="pay-form">
-          <div class="form-group full">
-            <label data-i18n="payCardNumber">Номер карты</label>
-            <input id="pay-card" inputmode="numeric" maxlength="19" data-i18n-ph="payCardPh" placeholder="0000 0000 0000 0000">
-          </div>
-          <div class="card-inputs">
-            <div class="form-group">
-              <label data-i18n="payExpiry">Срок действия</label>
-              <input id="pay-expiry" inputmode="numeric" maxlength="5" data-i18n-ph="payExpiryPh" placeholder="ММ/ГГ">
-            </div>
-            <div class="form-group">
-              <label data-i18n="payCvv">CVV</label>
-              <input id="pay-cvv" inputmode="numeric" maxlength="3" type="password">
-            </div>
-          </div>
-          <button class="btn btn-primary" id="pay-btn" style="width:100%" data-i18n="payBtn">Оплатить</button>
-          <div class="secure-note" data-i18n="paySecure">🔒 Демо-оплата. Реальные деньги не списываются.</div>
-        </div>
+        <div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text" data-i18n="payQrGenerating">Генерируем QR-код...</div></div>
       `;
       applyI18n();
-      const card = document.getElementById("pay-card");
-      card.addEventListener("input", () => {
-        card.value = card.value.replace(/\D/g, "").replace(/(\d{4})(?=\d)/g, "$1 ").slice(0, 19);
-      });
-      const exp = document.getElementById("pay-expiry");
-      exp.addEventListener("input", () => {
-        let v = exp.value.replace(/\D/g, "").slice(0, 4);
-        exp.value = v.length > 2 ? v.slice(0, 2) + "/" + v.slice(2) : v;
-      });
-      document.getElementById("pay-btn").addEventListener("click", processPayment);
+      startQrPayment();
     }
 
-    async function processPayment() {
-      const btn = document.getElementById("pay-btn");
-      btn.disabled = true;
-      const cardNum = document.getElementById("pay-card").value.replace(/\s/g, "");
-      const expiry = document.getElementById("pay-expiry").value;
-      const cvv = document.getElementById("pay-cvv").value;
-      if (!/^\d{16}$/.test(cardNum)) { alert(t("payCardInvalid")); btn.disabled = false; return; }
-      if (!/^\d{2}\/\d{2}$/.test(expiry)) { alert(t("payExpiryInvalid")); btn.disabled = false; return; }
-      if (!/^\d{3}$/.test(cvv)) { alert(t("payCvvInvalid")); btn.disabled = false; return; }
-
+    async function startQrPayment() {
       const body = document.getElementById("pay-body");
-      body.innerHTML = `<div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text" data-i18n="payProcessing">Обработка платежа...</div></div>`;
-      applyI18n();
-
-      await new Promise(r => setTimeout(r, 1200));
-
       try {
         const res = await apiFetch(`/api/payment/sms-send`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: Number(courseId), payment: { method: "card", cardLast4: cardNum.slice(-4) } }),
+          body: JSON.stringify({ courseId: Number(courseId), payment: { method: "qr" } }),
         });
-        showSmsStep(res.demoCode, cardNum);
-      } catch {
-        body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text" data-i18n="payFail">Оплата не прошла. Проверьте данные карты.</div></div>`;
+        currentQr = res.demoCode;
+        body.innerHTML = `
+          <div class="pay-summary">
+            <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
+            <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
+            <div class="ps-amount">${fmtPrice(course.price)}</div>
+          </div>
+          <div class="qr-box">
+            <img class="qr-img" src="${res.qrImage}" alt="QR">
+            <div class="qr-text">${t("payQrText")}</div>
+          </div>
+          <button class="btn btn-primary" id="qr-paid-btn" style="width:100%">${t("payQrPaid")}</button>
+          <div class="secure-note" data-i18n="paySecure">🔒 Демо-оплата. Реальные деньги не списываются.</div>
+        `;
         applyI18n();
-        setTimeout(() => { document.getElementById("pay-modal").classList.add("hidden"); }, 1500);
+        document.getElementById("qr-paid-btn").addEventListener("click", () => showSmsStep(currentQr));
+      } catch (err) {
+        body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${err.message}</div></div>`;
+        applyI18n();
       }
     }
 
-    function showSmsStep(demoCode, cardNum) {
+    function showSmsStep(demoCode) {
       const body = document.getElementById("pay-body");
       body.innerHTML = `
         <div class="pay-summary">
@@ -259,8 +257,9 @@
         try {
           const res = await apiFetch(`/api/payment/sms-send`, {
             method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ courseId: Number(courseId), payment: { method: "card", cardLast4: cardNum.slice(-4) } }),
+            body: JSON.stringify({ courseId: Number(courseId), payment: { method: "qr" } }),
           });
+          currentQr = res.demoCode;
           document.querySelector(".demo-code-box b").textContent = res.demoCode;
           alert(t("smsResent"));
         } catch (err) { alert(err.message); }
@@ -304,7 +303,7 @@
         const slides = media.map(m => `
           <div class="mg-slide">
             ${m.type === "video"
-              ? `<video controls preload="metadata" src="${escapeHtml(m.url)}"></video>`
+              ? `<div class="media-wrap">${speedRow()}<video controls preload="metadata" src="${escapeHtml(m.url)}"></video></div>`
               : `<img src="${escapeHtml(m.url)}" alt="">`}
           </div>`).join("");
         return `
@@ -338,11 +337,14 @@
       gallery.querySelector(".mg-prev").addEventListener("click", () => show(index - 1));
       gallery.querySelector(".mg-next").addEventListener("click", () => show(index + 1));
       dots.forEach(d => d.addEventListener("click", () => show(Number(d.dataset.i))));
+      wireSpeed(gallery);
 
-      document.addEventListener("keydown", (e) => {
+      if (window.__galleryKeyHandler) document.removeEventListener("keydown", window.__galleryKeyHandler);
+      window.__galleryKeyHandler = (e) => {
         if (gallery.matches(":hover") && e.key === "ArrowLeft") show(index - 1);
         if (gallery.matches(":hover") && e.key === "ArrowRight") show(index + 1);
-      });
+      };
+      document.addEventListener("keydown", window.__galleryKeyHandler);
 
       let touchX = null;
       gallery.addEventListener("touchstart", (e) => { touchX = e.touches[0].clientX; }, { passive: true });
@@ -375,15 +377,16 @@
           <div class="lesson-actions">
             ${fullAccess
               ? `<button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>
-                 <button class="btn btn-outline" id="download-btn">⬇ ${t("downloadLesson")}</button>`
+                 <button class="btn btn-outline" id="print-btn">🖨 ${t("printLesson")}</button>`
               : `<button class="btn btn-primary" id="full-access-btn">${t("fullAccess")}</button>`}
           </div>
         </div>`;
       view.scrollIntoView({ behavior: "smooth", block: "start" });
       setupQuiz();
-      const downloadBtn = document.getElementById("download-btn");
-      if (downloadBtn) downloadBtn.addEventListener("click", () => {
-        window.location.href = `/api/courses/${courseId}/lessons/${lessonId}/download`;
+      wireSpeed(view);
+      const printBtn = document.getElementById("print-btn");
+      if (printBtn) printBtn.addEventListener("click", () => {
+        window.open(`/api/courses/${courseId}/lessons/${lessonId}/print`, "_blank", "noopener");
       });
       const completeBtn = document.getElementById("complete-btn");
       if (completeBtn) completeBtn.addEventListener("click", async () => {
@@ -401,21 +404,40 @@
       });
     }
 
+    function speedRow() {
+      return `<div class="speed-row" role="group" aria-label="${t("speedLabel")}">
+        ${[0.75, 1, 1.25, 1.5, 2].map(r => `<button type="button" data-rate="${r}" class="${r === 1 ? "active" : ""}">${r}×</button>`).join("")}
+      </div>`;
+    }
+
     function renderVideo(url) {
       let src = url.trim();
       const yt = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]+)/);
       if (yt) {
         return `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen></iframe></div>`;
       }
-      return `<video class="video-wrap" controls preload="metadata"><source src="${escapeHtml(src)}"></video>`;
+      return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls preload="metadata"><source src="${escapeHtml(src)}"></video></div>`;
     }
 
     function renderMedia(url) {
       let src = url.trim();
       if (/\.(mp3|wav|m4a|aac|ogg|oga)$/i.test(src)) {
-        return `<div class="audio-wrap"><audio controls preload="metadata" src="${escapeHtml(src)}"></audio></div>`;
+        return `<div class="media-wrap">${speedRow()}<audio class="audio-wrap" controls preload="metadata" src="${escapeHtml(src)}"></audio></div>`;
       }
       return renderVideo(src);
+    }
+
+    function wireSpeed(scope) {
+      (scope || document).querySelectorAll(".media-wrap").forEach(wrap => {
+        const media = wrap.querySelector("video, audio");
+        if (!media) return;
+        wrap.querySelectorAll(".speed-row button").forEach(btn => {
+          btn.addEventListener("click", () => {
+            try { media.playbackRate = Number(btn.dataset.rate); } catch (_) {}
+            wrap.querySelectorAll(".speed-row button").forEach(b => b.classList.toggle("active", b === btn));
+          });
+        });
+      });
     }
 
     function renderQuiz(quiz) {

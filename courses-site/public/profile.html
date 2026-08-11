@@ -39,7 +39,9 @@
             <img src="${courseCover(c)}" alt="">
             <div>
               <div class="mc-title">${escapeHtml(c.title)}</div>
-              <div class="mc-meta">${t("instructorWord")}: ${escapeHtml(c.instructor) || "—"}</div>
+              <div class="mc-meta">${t("instructorWord")}: ${c.instructor_info && c.instructor_info.id
+                ? `<a class="author-link" href="author.html?id=${c.instructor_info.id}" onclick="event.stopPropagation()">${escapeHtml(c.instructor_info.name)}</a>`
+                : escapeHtml(c.instructor) || "—"}</div>
             </div>
             <div class="mc-progress">
               <div class="pct">${c.progress}%</div>

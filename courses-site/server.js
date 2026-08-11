@@ -5,7 +5,7 @@ const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const PDFDocument = require("pdfkit");
-const swaggerUi = require("swagger-ui-express");
+const QRCode = require("qrcode");
 const { pool, initSchema } = require("./db");
 
 const app = express();
@@ -21,12 +21,6 @@ app.use("/uploads", (req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, "public")));
 
-const swaggerDocument = JSON.parse(fs.readFileSync(path.join(__dirname, "swagger.json"), "utf8"));
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument, {
-  customSiteTitle: "API — Платформа курсов",
-  customCss: ".swagger-ui .topbar { display: none; }",
-}));
-
 app.use(session({
   secret: "courses_secret_key_2026",
   resave: false,
@@ -36,8 +30,10 @@ app.use(session({
 
 // Ожидающие SMS-подтверждения оплаты хранятся в таблице sms_codes (переживают рестарт сервера)
 
-// Загрузка файлов (видео / изображения / аудио)
-const UPLOAD_DIR = path.join(__dirname, "public", "uploads");
+// Загрузка файлов (видео / изображения / аудио).
+// Файлы хранятся вне public/ и отдаются только через защищённый /api/media
+// (видео и аудио — только записанным на курс пользователям).
+const UPLOAD_DIR = path.join(__dirname, "data", "uploads");
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 const upload = multer({
@@ -65,8 +61,52 @@ app.post("/api/upload", requireAdmin, (req, res) => {
   upload.single("file")(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.file) return res.status(400).json({ error: "Файл не загружен" });
-    res.json({ url: "/uploads/" + req.file.filename, name: req.file.originalname });
+    res.json({ url: "/api/media/" + req.file.filename, name: req.file.originalname });
   });
+});
+
+const PROTECTED_MEDIA_RE = /\.(mp4|webm|mov|mkv|avi|m4v|ogv|mp3|wav|m4a|aac|oga|flac|ogg)$/i;
+
+// Защищённая раздача файлов: видео и аудио доступны только авторизованным
+// пользователям, записанным на курс, который ссылается на файл (или админу).
+// Изображения (обложки, галереи, иллюстрации уроков) отдаются публично.
+app.get("/api/media/:file", async (req, res) => {
+  try {
+    const file = path.basename(String(req.params.file || ""));
+    if (!file || file === "." || file === ".." || file.includes("\\")) {
+      return res.status(400).json({ error: "Некорректный файл" });
+    }
+    const full = path.join(UPLOAD_DIR, file);
+    if (!full.startsWith(UPLOAD_DIR) || !fs.existsSync(full)) {
+      return res.status(404).json({ error: "Файл не найден" });
+    }
+    if (PROTECTED_MEDIA_RE.test(file)) {
+      if (!req.session.user) return res.status(401).json({ error: "Требуется вход" });
+      if (req.session.user.role !== "admin") {
+        const [rows] = await pool.query(
+          `SELECT l.course_id AS cid FROM lessons l WHERE l.video_url LIKE ?
+           UNION
+           SELECT cm.course_id AS cid FROM course_media cm WHERE cm.type IN ('video','audio') AND cm.url LIKE ?`,
+          [`%${file}%`, `%${file}%`]
+        );
+        if (!rows.length) return res.status(403).json({ error: "Доступ запрещён" });
+        const ids = rows.map(r => r.cid);
+        const [enr] = await pool.query(
+          "SELECT 1 FROM enrollments WHERE user_id = ? AND course_id IN (?) LIMIT 1",
+          [req.session.user.id, ids]
+        );
+        if (!enr.length) return res.status(403).json({ error: "Оплатите курс, чтобы смотреть видео" });
+      }
+    }
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "default-src 'none'");
+    res.sendFile(full);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Совместимость: старые ссылки /uploads/<файл> перенаправляются на защищённую раздачу.
+app.get("/uploads/:file", (req, res) => {
+  res.redirect("/api/media/" + encodeURIComponent(path.basename(req.params.file)));
 });
 
 function requireAuth(req, res, next) {
@@ -86,6 +126,33 @@ function getMediaType(url) {
   if (/\.(mp3|wav|m4a|aac|oga|flac|ogg)$/.test(clean)) return "audio";
   if (/(youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/.test(url || "")) return "video";
   return "image";
+}
+
+// Соцсети преподавателя хранятся как JSON-строка в БД: { telegram, instagram, vk, youtube, whatsapp, email, phone }
+function parseSocials(raw) {
+  if (!raw) return {};
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw) || {}; } catch { return {}; }
+}
+
+function socialsToDb(obj) {
+  const clean = {};
+  for (const k of ["telegram", "instagram", "vk", "youtube", "whatsapp", "email", "phone"]) {
+    const v = String(obj?.[k] || "").trim();
+    if (v) clean[k] = v;
+  }
+  return Object.keys(clean).length ? JSON.stringify(clean) : null;
+}
+
+// Из строки БД (courses.instructor / instructors.*) собирает компактный объект профиля
+function instructorInfoRow(row) {
+  if (!row || !row.instructor_id) return null;
+  return {
+    id: row.instructor_id,
+    name: row.inst_name || row.instructor || "",
+    avatar: row.inst_avatar || "",
+    specialty: row.inst_specialty || "",
+  };
 }
 
 function escapeHtmlFile(s) {
@@ -112,7 +179,8 @@ function mediaHtml(url, base) {
   return `<div class="block"><video controls src="${abs}"></video></div>`;
 }
 
-function buildLessonHtml(lesson, quiz, base) {
+function buildLessonHtml(lesson, quiz, base, opts) {
+  const print = opts && opts.print;
   const content = escapeHtmlFile(lesson.content).split(/\n/).map(p => `<p>${p || "&nbsp;"}</p>`).join("");
   const quizHtml = quiz.length ? `
     <h2>Тест к уроку</h2>
@@ -123,7 +191,13 @@ function buildLessonHtml(lesson, quiz, base) {
           <div class="option${j === q.correct ? " correct" : ""}">${j === q.correct ? "✔ " : "• "}${escapeHtmlFile(o)}${j === q.correct ? " — <i>правильный ответ</i>" : ""}</div>`).join("")}
       </div>`).join("")}` : "";
   const img = lesson.image_url ? `<div class="block"><img src="${escapeHtmlFile(absUrl(lesson.image_url, base))}" alt=""></div>` : "";
-  const media = lesson.video_url ? mediaHtml(lesson.video_url, base) : "";
+  // Видео и аудио при печати не включаются: их можно смотреть только на сайте.
+  const media = !print && lesson.video_url ? mediaHtml(lesson.video_url, base) : "";
+  const printBar = print ? `
+    <div class="print-bar">
+      <button onclick="window.print()">🖨 Печать / Print</button>
+    </div>
+    <script>window.addEventListener('load', function(){ setTimeout(function(){ window.print(); }, 400); });<\/script>` : "";
   return `<!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -140,17 +214,21 @@ function buildLessonHtml(lesson, quiz, base) {
   .question { border: 1px solid #dce4ee; border-radius: 10px; padding: 14px; margin-bottom: 12px; }
   .option { padding: 4px 8px; }
   .option.correct { color: #2e7d32; font-weight: 700; }
+  .print-bar { position: fixed; top: 12px; right: 12px; }
+  .print-bar button { padding: 10px 16px; border: 0; border-radius: 8px; background: #1479c9; color: #fff; cursor: pointer; font-size: 14px; }
   .download-note { border-top: 1px solid #dce4ee; margin-top: 24px; padding-top: 12px; color: #7d8da0; font-size: 13px; }
+  @media print { .print-bar { display: none; } }
 </style>
 </head>
 <body>
+  ${printBar}
   <div class="meta">${escapeHtmlFile(lesson.course_title)} · Урок ${lesson.position + 1} · ⏱ ${lesson.duration_min || 0} мин</div>
   <h1>${escapeHtmlFile(lesson.title)}</h1>
   ${img}
   ${media}
   ${content}
   ${quizHtml}
-  <div class="download-note">Скачано с платформы «Курсы»</div>
+  <div class="download-note">Печатная версия урока с платформы «Курсы»</div>
 </body>
 </html>`;
 }
@@ -177,18 +255,22 @@ app.get("/api/me", (req, res) => {
 });
 
 app.post("/api/register", async (req, res) => {
-  const { name, email, password } = req.body;
-  if (!name || !email || !password) return res.status(400).json({ error: "Заполните все поля" });
+  const { name, email, password, phone } = req.body;
+  if (!name || !email || !phone || !password) return res.status(400).json({ error: "Заполните все поля" });
   if (password.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
+  const phoneDigits = String(phone).replace(/\D/g, "");
+  if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+    return res.status(400).json({ error: "Введите корректный номер телефона" });
+  }
   try {
     const [existing] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
     if (existing.length) return res.status(409).json({ error: "Email уже зарегистрирован" });
     const hash = await bcrypt.hash(password, 10);
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-      [name, email, hash]
+      "INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)",
+      [name, email, phoneDigits, hash]
     );
-    const user = { id: result.insertId, name, email, role: "user" };
+    const user = { id: result.insertId, name, email, phone: phoneDigits, role: "user" };
     req.session.user = user;
     res.json({ user });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -202,7 +284,7 @@ app.post("/api/login", async (req, res) => {
     if (!rows.length) return res.status(401).json({ error: "Неверный email или пароль" });
     const ok = await bcrypt.compare(password, rows[0].password_hash);
     if (!ok) return res.status(401).json({ error: "Неверный email или пароль" });
-    const user = { id: rows[0].id, name: rows[0].name, email: rows[0].email, role: rows[0].role };
+    const user = { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone || "", role: rows[0].role };
     req.session.user = user;
     res.json({ user });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -222,18 +304,17 @@ app.get("/api/categories", async (_req, res) => {
 app.get("/api/courses", async (req, res) => {
   try {
     const categoryId = req.query.category ? Number(req.query.category) : null;
+    const sel = `SELECT c.*, cat.name AS category_name,
+           i.id AS instructor_id, i.name AS inst_name, i.avatar AS inst_avatar, i.specialty AS inst_specialty,
+           (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lessons_count
+         FROM courses c
+         LEFT JOIN categories cat ON c.category_id = cat.id
+         LEFT JOIN instructors i ON i.id = c.instructor_id`;
     const q = categoryId
-      ? `SELECT c.*, cat.name AS category_name,
-           (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lessons_count
-         FROM courses c LEFT JOIN categories cat ON c.category_id = cat.id
-         WHERE c.category_id = ? ORDER BY c.created_at DESC`
-      : `SELECT c.*, cat.name AS category_name,
-           (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lessons_count
-         FROM courses c LEFT JOIN categories cat ON c.category_id = cat.id
-         ORDER BY c.created_at DESC`;
-    const [rows] = categoryId
-      ? await pool.query(q, [categoryId])
-      : await pool.query(q);
+      ? `${sel} WHERE c.category_id = ? ORDER BY c.created_at DESC`
+      : `${sel} ORDER BY c.created_at DESC`;
+    const [rows] = categoryId ? await pool.query(q, [categoryId]) : await pool.query(q);
+    for (const row of rows) row.instructor_info = instructorInfoRow(row);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -241,8 +322,12 @@ app.get("/api/courses", async (req, res) => {
 app.get("/api/courses/:id", async (req, res) => {
   try {
     const [courses] = await pool.query(
-      `SELECT c.*, cat.name AS category_name FROM courses c
-       LEFT JOIN categories cat ON c.category_id = cat.id WHERE c.id = ?`,
+      `SELECT c.*, cat.name AS category_name,
+         i.id AS instructor_id, i.name AS inst_name, i.avatar AS inst_avatar, i.specialty AS inst_specialty
+       FROM courses c
+       LEFT JOIN categories cat ON c.category_id = cat.id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
+       WHERE c.id = ?`,
       [req.params.id]
     );
     if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
@@ -271,14 +356,60 @@ app.get("/api/courses/:id", async (req, res) => {
     }
     const isAdmin = req.session.user && req.session.user.role === "admin";
     const showContent = enrolled || isAdmin;
-    const parsedLessons = lessons.map(l => (showContent || l.position === 0)
+    const parsedLessons = lessons.map(l => showContent
       ? { ...l, quiz: parseQuiz(l.quiz) }
       : { id: l.id, title: l.title, position: l.position, duration_min: l.duration_min });
+    course.instructor_info = instructorInfoRow(course);
     res.json({ ...course, lessons: parsedLessons, reviews, media, enrolled, progress, isAdmin });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get("/api/courses/:courseId/lessons/:lessonId/download", requireAuth, async (req, res) => {
+// Публичные профили преподавателей (авторов курсов)
+app.get("/api/instructors", async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT i.id, i.name, i.specialty, i.bio, i.experience, i.avatar, i.socials, i.created_at,
+         (SELECT COUNT(*) FROM courses c WHERE c.instructor_id = i.id) AS courses_count,
+         (SELECT COUNT(*) FROM reviews r JOIN courses c ON c.id = r.course_id WHERE c.instructor_id = i.id) AS reviews_count
+       FROM instructors i ORDER BY i.name`
+    );
+    for (const row of rows) row.socials = parseSocials(row.socials);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/instructors/:id", async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM instructors WHERE id = ?", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Преподаватель не найден" });
+    const instructor = rows[0];
+    instructor.socials = parseSocials(instructor.socials);
+    const [courses] = await pool.query(
+      `SELECT c.id, c.title, c.description, c.price, c.image_url, c.created_at, cat.name AS category_name,
+         (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lessons_count
+       FROM courses c LEFT JOIN categories cat ON c.category_id = cat.id
+       WHERE c.instructor_id = ? ORDER BY c.created_at DESC`,
+      [instructor.id]
+    );
+    for (const c of courses) {
+      c.instructor_info = { id: instructor.id, name: instructor.name, avatar: instructor.avatar, specialty: instructor.specialty };
+    }
+    const [reviews] = await pool.query(
+      `SELECT r.rating, r.comment, r.created_at, u.name AS user_name, c.title AS course_title
+       FROM reviews r
+       JOIN users u ON u.id = r.user_id
+       JOIN courses c ON c.id = r.course_id
+       WHERE c.instructor_id = ? ORDER BY r.created_at DESC`,
+      [instructor.id]
+    );
+    const avg = reviews.length
+      ? (reviews.reduce((s, r) => s + Number(r.rating), 0) / reviews.length).toFixed(1)
+      : null;
+    res.json({ ...instructor, courses, reviews, avg_rating: avg });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/courses/:courseId/lessons/:lessonId/print", requireAuth, async (req, res) => {
   try {
     const [enr] = await pool.query(
       "SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ?",
@@ -297,9 +428,8 @@ app.get("/api/courses/:courseId/lessons/:lessonId/download", requireAuth, async 
     const lesson = rows[0];
     const quiz = parseQuiz(lesson.quiz);
     const base = `${req.protocol}://${req.get("host")}`;
-    const html = buildLessonHtml(lesson, quiz, base);
+    const html = buildLessonHtml(lesson, quiz, base, { print: true });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="lesson-${lesson.id}.html"`);
     res.send(html);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -322,12 +452,13 @@ app.post("/api/courses/:id/enroll", requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Шаг 1: запрос SMS-кода для оплаты
+// Шаг 1: запрос SMS-кода для оплаты. Возвращает демо-QR-код (сканируется банковским
+// приложением или камерой) — данные карты на сайт не вводятся.
 app.post("/api/payment/sms-send", requireAuth, async (req, res) => {
   const { courseId, payment } = req.body || {};
   if (!courseId || !payment || !payment.method) return res.status(400).json({ error: "Заполните данные оплаты" });
   try {
-    const [courses] = await pool.query("SELECT price FROM courses WHERE id = ?", [courseId]);
+    const [courses] = await pool.query("SELECT id, title, price FROM courses WHERE id = ?", [courseId]);
     if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
     const price = Number(courses[0].price) || 0;
     if (price <= 0) return res.status(400).json({ error: "Курс бесплатный, оплата не требуется" });
@@ -338,11 +469,13 @@ app.post("/api/payment/sms-send", requireAuth, async (req, res) => {
     await pool.query("DELETE FROM sms_codes WHERE session_id = ?", [req.session.id]);
     await pool.query(
       "INSERT INTO sms_codes (session_id, code, course_id, price, method, card_last4, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [req.session.id, code, Number(courseId), price, payment.method, payment.cardLast4 || null, expiresAtMs]
+      [req.session.id, code, Number(courseId), price, payment.method || "qr", null, expiresAtMs]
     );
-    // В реальном проекте здесь отправка SMS на телефон клиента.
-    // Для демо код возвращается в ответе и показывается на экране.
-    res.json({ demoCode: code });
+    // Демо: QR-код кодирует платёжную ссылку. В реальном проекте здесь платёжный
+    // шлюз (СБП/ЮKassa), а код приходит на телефон клиента реальным SMS.
+    const qrData = `https://sbp.demo/pay/courses/${Number(courseId)}?sum=${price}&title=${encodeURIComponent(courses[0].title)}`;
+    const qrImage = await QRCode.toDataURL(qrData, { width: 260, margin: 1, errorCorrectionLevel: "M" });
+    res.json({ demoCode: code, qrData, qrImage });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -448,11 +581,14 @@ app.post("/api/courses/:id/review", requireAuth, async (req, res) => {
 app.get("/api/my", requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT c.id, c.title, c.price, c.instructor, c.image_url, e.progress, e.enrolled_at
+      `SELECT c.id, c.title, c.price, c.instructor, c.image_url, e.progress, e.enrolled_at,
+         i.id AS instructor_id, i.name AS inst_name, i.avatar AS inst_avatar, i.specialty AS inst_specialty
        FROM enrollments e JOIN courses c ON e.course_id = c.id
+       LEFT JOIN instructors i ON i.id = c.instructor_id
        WHERE e.user_id = ? ORDER BY e.enrolled_at DESC`,
       [req.session.user.id]
     );
+    for (const row of rows) row.instructor_info = instructorInfoRow(row);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -539,6 +675,22 @@ app.get("/api/admin/users", requireAdmin, async (_req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post("/api/admin/users", requireAdmin, async (req, res) => {
+  const { name, email, password, role, phone } = req.body || {};
+  if (!name || !email || !password) return res.status(400).json({ error: "Заполните все поля" });
+  if (String(password).length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
+  try {
+    const [existing] = await pool.query("SELECT id FROM users WHERE email = ?", [String(email).trim()]);
+    if (existing.length) return res.status(409).json({ error: "Email уже зарегистрирован" });
+    const hash = await bcrypt.hash(String(password), 10);
+    const [result] = await pool.query(
+      "INSERT INTO users (name, email, phone, password_hash, role) VALUES (?, ?, ?, ?, ?)",
+      [String(name).trim(), String(email).trim(), String(phone || "").replace(/\D/g, ""), hash, role === "admin" ? "admin" : "user"]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete("/api/admin/users/:id/courses/:courseId", requireAdmin, async (req, res) => {
   try {
     const [r] = await pool.query(
@@ -547,6 +699,23 @@ app.delete("/api/admin/users/:id/courses/:courseId", requireAdmin, async (req, r
     );
     if (!r.affectedRows) return res.status(404).json({ error: "Запись не найдена" });
     await pool.query("DELETE FROM reviews WHERE user_id = ? AND course_id = ?", [req.params.id, req.params.courseId]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Ручное зачисление пользователя на курс без оплаты (например, при личной оплате).
+app.post("/api/admin/users/:id/courses", requireAdmin, async (req, res) => {
+  const courseId = req.body && req.body.courseId;
+  if (!courseId) return res.status(400).json({ error: "Укажите курс" });
+  try {
+    const [users] = await pool.query("SELECT id FROM users WHERE id = ?", [req.params.id]);
+    if (!users.length) return res.status(404).json({ error: "Пользователь не найден" });
+    const [courses] = await pool.query("SELECT id FROM courses WHERE id = ?", [courseId]);
+    if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
+    await pool.query(
+      "INSERT IGNORE INTO enrollments (user_id, course_id) VALUES (?, ?)",
+      [req.params.id, Number(courseId)]
+    );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -602,25 +771,74 @@ app.delete("/api/admin/categories/:id", requireAdmin, async (req, res) => {
 });
 
 app.post("/api/admin/courses", requireAdmin, async (req, res) => {
-  const { title, description, price, category_id, instructor, image_url } = req.body;
+  const { title, description, price, category_id, instructor, instructor_id, image_url } = req.body;
   if (!title) return res.status(400).json({ error: "Название обязательно" });
   try {
     const [result] = await pool.query(
-      "INSERT INTO courses (title, description, price, category_id, instructor, image_url) VALUES (?, ?, ?, ?, ?, ?)",
-      [title, description || "", price || 0, category_id || null, instructor || "", image_url || ""]
+      "INSERT INTO courses (title, description, price, category_id, instructor, instructor_id, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [title, description || "", price || 0, category_id || null, instructor || "", instructor_id || null, image_url || ""]
     );
     res.json({ success: true, id: result.insertId });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put("/api/admin/courses/:id", requireAdmin, async (req, res) => {
-  const { title, description, price, category_id, instructor, image_url } = req.body;
+  const { title, description, price, category_id, instructor, instructor_id, image_url } = req.body;
   if (!title) return res.status(400).json({ error: "Название обязательно" });
   try {
     await pool.query(
-      "UPDATE courses SET title = ?, description = ?, price = ?, category_id = ?, instructor = ?, image_url = ? WHERE id = ?",
-      [title, description || "", price || 0, category_id || null, instructor || "", image_url || "", req.params.id]
+      "UPDATE courses SET title = ?, description = ?, price = ?, category_id = ?, instructor = ?, instructor_id = ?, image_url = ? WHERE id = ?",
+      [title, description || "", price || 0, category_id || null, instructor || "", instructor_id || null, image_url || "", req.params.id]
     );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Управление профилями преподавателей
+app.get("/api/admin/instructors", requireAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT i.*,
+         (SELECT COUNT(*) FROM courses c WHERE c.instructor_id = i.id) AS courses_count
+       FROM instructors i ORDER BY i.name`
+    );
+    for (const row of rows) row.socials = parseSocials(row.socials);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/admin/instructors", requireAdmin, async (req, res) => {
+  const { name, specialty, bio, experience, avatar, socials } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: "Имя преподавателя обязательно" });
+  try {
+    const [result] = await pool.query(
+      "INSERT INTO instructors (name, specialty, bio, experience, avatar, socials) VALUES (?, ?, ?, ?, ?, ?)",
+      [String(name).trim(), specialty || "", bio || "", experience || "", avatar || "", socialsToDb(socials)]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
+  const { name, specialty, bio, experience, avatar, socials } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: "Имя преподавателя обязательно" });
+  try {
+    const [rows] = await pool.query("SELECT id FROM instructors WHERE id = ?", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Преподаватель не найден" });
+    await pool.query(
+      "UPDATE instructors SET name = ?, specialty = ?, bio = ?, experience = ?, avatar = ?, socials = ? WHERE id = ?",
+      [String(name).trim(), specialty || "", bio || "", experience || "", avatar || "", socialsToDb(socials), req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT id FROM instructors WHERE id = ?", [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Преподаватель не найден" });
+    await pool.query("UPDATE courses SET instructor_id = NULL WHERE instructor_id = ?", [req.params.id]);
+    await pool.query("DELETE FROM instructors WHERE id = ?", [req.params.id]);
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -684,14 +902,25 @@ async function seed() {
   const [cat4] = await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", ["Детский массаж", "Безопасные техники массажа для малышей и детей разного возраста."]);
 
   const base = [
-    { c: cat1.insertId, t: "Классический массаж с нуля до профи", d: "Полный курс классического массажа: анатомия, базовые приёмы, техники спины и шеи, построение сеанса.", p: 3490, i: "Ирина Соколова", img: "/uploads/course-classic.svg" },
-    { c: cat1.insertId, t: "Лечебный массаж спины и шеи", d: "Как работать с болями в спине и шее: диагностика, глубокие техники, шейно-воротниковая зона.", p: 4990, i: "Сергей Морозов", img: "/uploads/course-spine.svg" },
-    { c: cat2.insertId, t: "Спортивный массаж и восстановление", d: "Разогревающий и восстановительный массаж, работа с крепатурой и травмами у спортсменов.", p: 2990, i: "Алексей Волков", img: "/uploads/course-sport.svg" },
-    { c: cat3.insertId, t: "Тайский массаж: традиционные техники", d: "Давление большим пальцем, стрейчинг и полная последовательность традиционного сеанса.", p: 5490, i: "Ким Сурайя", img: "/uploads/course-thai.svg" },
-    { c: cat4.insertId, t: "Детский массаж для родителей", d: "Массаж и гимнастика для малышей: безопасность, базовые приёмы, игровые техники.", p: 2490, i: "Елена Кузнецова", img: "/uploads/course-kids.svg" },
+    { c: cat1.insertId, t: "Классический массаж с нуля до профи", d: "Полный курс классического массажа: анатомия, базовые приёмы, техники спины и шеи, построение сеанса.", p: 3490, i: "Ирина Соколова", sp: "Классический и лечебный массаж", exp: "12 лет практики, сертификаты FISIOTERAPIA", bio: "Обучаю классическому массажу с 2014 года. Работала с профессиональными спортсменами и клиентами с хроническими болями в спине. Автор методики «мягкого глубокого прорабатывания»." },
+    { c: cat1.insertId, t: "Лечебный массаж спины и шеи", d: "Как работать с болями в спине и шее: диагностика, глубокие техники, шейно-воротниковая зона.", p: 4990, i: "Сергей Морозов", sp: "Лечебный массаж и реабилитация", exp: "15 лет практики, мед. образование", bio: "Врач-реабилитолог и массажист. Специализируюсь на лечебном массаже позвоночника и реабилитации после травм. Преподаю диагностику осанки и работу с триггерными точками." },
+    { c: cat2.insertId, t: "Спортивный массаж и восстановление", d: "Разогревающий и восстановительный массаж, работа с крепатурой и травмами у спортсменов.", p: 2990, i: "Алексей Волков", sp: "Спортивный массаж", exp: "10 лет практики, МС по дзюдо", bio: "Мастер спорта по дзюдо, сертифицированный спортивный массажист. Работал с командами по футболу и боксу. Обучаю разминочному, восстановительному массажу и работе при травмах." },
+    { c: cat3.insertId, t: "Тайский массаж: традиционные техники", d: "Давление большим пальцем, стрейчинг и полная последовательность традиционного сеанса.", p: 5490, i: "Ким Сурайя", sp: "Тайский традиционный массаж", exp: "20 лет практики, обучение в Чиангмае", bio: "Потомственный тайский массажист. Обучалась в школе Wat Pho (Бангкок) и в Чиангмае. Передаёт традиционные техники давления, энергетические линии и стрейчинг." },
+    { c: cat4.insertId, t: "Детский массаж для родителей", d: "Массаж и гимнастика для малышей: безопасность, базовые приёмы, игровые техники.", p: 2490, i: "Елена Кузнецова", sp: "Детский массаж", exp: "9 лет практики, курс по детскому массажу", bio: "Педиатрический массажист. Научила массажу и гимнастике сотни родителей. Курс построен на безопасных игровых техниках для детей от рождения до 3 лет." },
   ];
   for (const b of base) {
-    await pool.query("INSERT INTO courses (category_id, title, description, price, instructor, image_url) VALUES (?, ?, ?, ?, ?, ?)", [b.c, b.t, b.d, b.p, b.i, b.img]);
+    let insId = null;
+    const [existing] = await pool.query("SELECT id FROM instructors WHERE name = ?", [b.i]);
+    if (existing.length) {
+      insId = existing[0].id;
+    } else {
+      const [ins] = await pool.query(
+        "INSERT INTO instructors (name, specialty, bio, experience) VALUES (?, ?, ?, ?)",
+        [b.i, b.sp, b.bio, b.exp]
+      );
+      insId = ins.insertId;
+    }
+    await pool.query("INSERT INTO courses (category_id, title, description, price, instructor, instructor_id, image_url) VALUES (?, ?, ?, ?, ?, ?, ?)", [b.c, b.t, b.d, b.p, b.i, insId, b.img || ""]);
   }
   const [allCourses] = await pool.query("SELECT id FROM courses");
   const lessonTitles = ["Введение", "Основы темы", "Практика", "Продвинутые техники", "Итоговый проект"];

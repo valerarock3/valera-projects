@@ -1,6 +1,9 @@
 # Папки зависимостей
 node_modules/
 
+# Загруженные пользователями файлы (медиа курсов)
+courses-site/data/uploads/
+
 # Данные и временные файлы MySQL
 mysql-data/
 mysql-data8/

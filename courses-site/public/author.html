@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Профиль преподавателя</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container" id="author-container"><div class="loading">Загрузка...</div></div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+    const instructorId = new URLSearchParams(location.search).get("id");
+    let instructor = null;
+
+    async function load() {
+      const container = document.getElementById("author-container");
+      try {
+        instructor = await apiFetch(`/api/instructors/${instructorId}`);
+      } catch (err) {
+        container.innerHTML = `<div class="empty">${err.message}</div>`;
+        return;
+      }
+      render();
+    }
+
+    function socialLinks(socials) {
+      const net = [
+        ["telegram", "✈", "https://t.me/"],
+        ["instagram", "📸", "https://instagram.com/"],
+        ["vk", "VK", "https://vk.com/"],
+        ["youtube", "▶", "https://youtube.com/@"],
+        ["whatsapp", "💬", "https://wa.me/"],
+        ["email", "✉", "mailto:"],
+        ["phone", "☎", "tel:"],
+      ];
+      return net
+        .filter(([key]) => socials && socials[key])
+        .map(([key, icon, prefix]) => {
+          let value = String(socials[key]).trim();
+          const href = /^[a-z][a-z0-9+.-]*:\/\//i.test(value) ? value : prefix + value;
+          return `<a class="author-social" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="${escapeHtml(value)}">${icon} ${escapeHtml(value.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, ""))}</a>`;
+        }).join("");
+    }
+
+    function render() {
+      const container = document.getElementById("author-container");
+      const a = instructor;
+      const avg = a.avg_rating;
+      const hasBio = a.bio && a.bio.trim();
+      container.innerHTML = `
+        <a href="index.html" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()};text-decoration:none;font-size:14px" data-i18n="backToCatalog">← Назад к каталогу</a>
+
+        <div class="author-header card">
+          <img class="author-avatar" src="${escapeHtml(a.avatar || "/uploads/course-default.svg")}" alt="">
+          <div class="author-info">
+            <h1 class="author-name">${escapeHtml(a.name)}</h1>
+            ${a.specialty ? `<div class="author-specialty">${escapeHtml(a.specialty)}</div>` : ""}
+            ${a.experience ? `<div class="author-experience">🗓 ${escapeHtml(a.experience)}</div>` : ""}
+            <div class="author-meta">
+              <span class="badge badge-user">${t("authorCourses")}: ${a.courses.length}</span>
+              <span class="badge badge-paid">⭐ ${avg ? avg + " / 5" : t("noReviews")}</span>
+            </div>
+            ${hasBio ? `<div class="author-bio">${nl2br(a.bio)}</div>` : ""}
+            ${socialLinks(a.socials) ? `<div class="author-socials">${socialLinks(a.socials)}</div>` : ""}
+          </div>
+        </div>
+
+        <h2 class="page-title" style="font-size:20px;margin-top:32px">${t("authorCourses")} (${a.courses.length})</h2>
+        ${a.courses.length
+          ? `<div class="courses-grid">${a.courses.map(c => `
+              <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
+                <img src="${courseCover(c)}" alt="">
+                <div class="course-body">
+                  <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
+                  <div class="course-title">${escapeHtml(c.title)}</div>
+                  <div class="course-desc">${escapeHtml((c.description || "").slice(0, 90))}</div>
+                  <div class="course-meta">
+                    <span class="course-price">${fmtPrice(c.price)}</span>
+                    <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
+                  </div>
+                </div>
+              </div>`).join("")}</div>`
+          : `<div class="empty">${t("authorNoCourses")}</div>`}
+
+        <h2 class="page-title" style="font-size:20px;margin-top:32px">${t("reviews")} (${a.reviews.length})</h2>
+        ${a.reviews.map(r => `
+          <div class="review-item">
+            <span class="stars">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span>
+            <span class="ruser"> ${escapeHtml(r.user_name)}</span>
+            <span class="rcourse" style="color:var(--text-faint);font-size:12px"> — ${escapeHtml(r.course_title)}</span>
+            <div class="rtext">${nl2br(r.comment || "")}</div>
+          </div>`).join("") || `<div class="empty">${t("noReviews")}</div>`}
+      `;
+      applyI18n();
+    }
+
+    initTheme();
+    renderNav();
+    load();
+  </script>
+</body>
+</html>
