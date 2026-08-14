@@ -49,7 +49,7 @@
         : "—";
 
       container.innerHTML = `
-        <a href="index.html" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()};text-decoration:none;font-size:14px" data-i18n="backToCatalog">← Назад к каталогу</a>
+        <a href="catalog.html" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()};text-decoration:none;font-size:14px" data-i18n="backToCatalog">← Назад к каталогу</a>
         <div class="course-detail-grid mt-16">
           <div class="course-hero">
             ${heroMediaHtml(course)}
@@ -303,7 +303,7 @@
         const slides = media.map(m => `
           <div class="mg-slide">
             ${m.type === "video"
-              ? `<div class="media-wrap">${speedRow()}<video controls preload="metadata" src="${escapeHtml(m.url)}"></video></div>`
+              ? `<div class="media-wrap">${speedRow()}<video controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata" src="${escapeHtml(m.url)}"></video></div>`
               : `<img src="${escapeHtml(m.url)}" alt="">`}
           </div>`).join("");
         return `
@@ -376,18 +376,16 @@
           ${lesson.quiz && lesson.quiz.length ? renderQuiz(lesson.quiz) : ""}
           <div class="lesson-actions">
             ${fullAccess
-              ? `<button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>
-                 <button class="btn btn-outline" id="print-btn">🖨 ${t("printLesson")}</button>`
+              ? `<button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>`
               : `<button class="btn btn-primary" id="full-access-btn">${t("fullAccess")}</button>`}
           </div>
+          <div class="lesson-protect-note">🔒 ${t("lessonProtectNote")}</div>
+          <div class="lesson-watermark" aria-hidden="true">${escapeHtml(me ? me.name : "")} · ${escapeHtml(course.title)}</div>
         </div>`;
       view.scrollIntoView({ behavior: "smooth", block: "start" });
       setupQuiz();
       wireSpeed(view);
-      const printBtn = document.getElementById("print-btn");
-      if (printBtn) printBtn.addEventListener("click", () => {
-        window.open(`/api/courses/${courseId}/lessons/${lessonId}/print`, "_blank", "noopener");
-      });
+      protectLesson(view);
       const completeBtn = document.getElementById("complete-btn");
       if (completeBtn) completeBtn.addEventListener("click", async () => {
         const data = await apiFetch(`/api/courses/${courseId}/progress`, {
@@ -410,19 +408,46 @@
       </div>`;
     }
 
+    // Защита урока от копирования и скачивания: отключает контекстное меню,
+    // выделение текста, сочетания клавиш и перетаскивание, добавляет водяной знак.
+    function protectLesson(root) {
+      if (!root) return;
+      root.querySelectorAll("video, audio").forEach(m => {
+        m.setAttribute("controlsList", "nodownload noremoteplayback");
+        m.setAttribute("disablepictureinpicture", "");
+        m.oncontextmenu = () => false;
+      });
+      if (root.dataset.protected) return;
+      root.dataset.protected = "1";
+      const blocked = e => e.preventDefault();
+      root.addEventListener("contextmenu", blocked);
+      root.addEventListener("copy", blocked);
+      root.addEventListener("cut", blocked);
+      root.addEventListener("paste", blocked);
+      root.addEventListener("dragstart", blocked);
+      root.addEventListener("keydown", e => {
+        if (e.ctrlKey && ["c", "x", "s", "p", "u", "a"].includes((e.key || "").toLowerCase())) e.preventDefault();
+        if (e.key === "F12") e.preventDefault();
+        if (e.ctrlKey && e.shiftKey && ["i", "j", "c", "k"].includes((e.key || "").toLowerCase())) e.preventDefault();
+      });
+      root.addEventListener("mousedown", e => {
+        if (e.button === 2) e.preventDefault();
+      });
+    }
+
     function renderVideo(url) {
       let src = url.trim();
       const yt = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]+)/);
       if (yt) {
         return `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen></iframe></div>`;
       }
-      return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls preload="metadata"><source src="${escapeHtml(src)}"></video></div>`;
+      return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="${escapeHtml(src)}"></video></div>`;
     }
 
     function renderMedia(url) {
       let src = url.trim();
       if (/\.(mp3|wav|m4a|aac|ogg|oga)$/i.test(src)) {
-        return `<div class="media-wrap">${speedRow()}<audio class="audio-wrap" controls preload="metadata" src="${escapeHtml(src)}"></audio></div>`;
+        return `<div class="media-wrap">${speedRow()}<audio class="audio-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata" src="${escapeHtml(src)}"></audio></div>`;
       }
       return renderVideo(src);
     }

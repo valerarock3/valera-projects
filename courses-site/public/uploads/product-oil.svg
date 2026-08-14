@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b8751d"/>
+      <stop offset="1" stop-color="#e0a33c"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g stroke="#ffffff" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M185 58 c -2 12 -2 24 0 34"/>
+    <rect x="168" y="94" width="64" height="14" rx="7"/>
+    <path d="M172 118 c -6 20 -6 40 0 54"/>
+    <path d="M228 118 c 6 20 6 40 0 54"/>
+    <path d="M172 172 c 0 8 12 12 28 12 c 16 0 28 -4 28 -12"/>
+    <circle cx="200" cy="202" r="8"/>
+  </g>
+  <rect x="20" y="172" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#8a5613">Массажное масло</text>
+</svg>

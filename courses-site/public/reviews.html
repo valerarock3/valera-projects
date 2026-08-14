@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Отзывы</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="sectionReviews">Отзывы клиентов</h1>
+    <div class="card-grid" id="reviews-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+  async function loadReviews() {
+    const grid = document.getElementById("reviews-grid");
+    grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
+    try {
+      const data = await apiFetch("/api/site-reviews");
+      if (!data.length) { grid.innerHTML = `<div class="empty">${t("noSiteReviews")}</div>`; return; }
+      grid.innerHTML = data.map(r => `
+        <div class="review-card">
+          <div class="stars">${"★".repeat(Math.min(5, r.rating))}${"☆".repeat(Math.max(0, 5 - Math.min(5, r.rating)))}</div>
+          <div class="review-author">${escapeHtml(r.author)}</div>
+          <div class="review-role">${escapeHtml(r.role || "")}</div>
+          <div class="review-text">${escapeHtml(r.text || "")}</div>
+        </div>
+      `).join("");
+    } catch (err) {
+      grid.innerHTML = `<div class="empty">${err.message}</div>`;
+    }
+  }
+  loadReviews();
+  </script>
+</body>
+</html>

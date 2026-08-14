@@ -85,6 +85,66 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .course-info { font-size: 12px; color: var(--text-faint); }
 .course-instructor { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
 
+.hero { text-align: center; padding: 48px 0 40px; }
+.hero h1 { font-size: 40px; line-height: 1.2; margin-bottom: 16px; background: linear-gradient(120deg, var(--accent), #7c4dff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { font-size: 17px; color: var(--text-dim); max-width: 640px; margin: 0 auto 28px; line-height: 1.6; }
+.hero-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+.hero-buttons .btn { font-size: 16px; padding: 12px 26px; }
+
+.section { margin-top: 48px; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.section-title { font-size: 24px; }
+.section-link { color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.section-link:hover { text-decoration: underline; }
+
+.section-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 16px; }
+.section-btn {
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px;
+  padding: 22px; text-decoration: none; transition: all .2s; cursor: pointer;
+}
+.section-btn:hover { transform: translateY(-4px); box-shadow: 0 12px 30px var(--card-hover-shadow); border-color: var(--accent); }
+.section-btn .sb-icon { font-size: 34px; }
+.section-btn .sb-title { font-size: 16px; font-weight: 700; color: var(--text); }
+.section-btn .sb-sub { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.section-btn .sb-arrow { margin-top: auto; color: var(--accent); font-size: 13px; font-weight: 600; }
+
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
+.product-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: transform .2s, box-shadow .2s; }
+.product-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px var(--card-hover-shadow); }
+.product-card img { width: 100%; height: 170px; object-fit: cover; display: block; background: var(--bg); }
+.product-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.product-cat { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; }
+.product-name { font-size: 16px; font-weight: 600; color: var(--text); }
+.product-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; }
+.product-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+.product-price { font-size: 18px; font-weight: 700; color: var(--accent); }
+.badge-stock { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 12px; }
+.badge-stock.in { background: var(--success); color: #fff; }
+.badge-stock.out { background: var(--danger-soft); color: var(--danger-text); }
+
+.service-card, .consult-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 10px; transition: transform .2s, box-shadow .2s; }
+.service-card:hover, .consult-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px var(--card-hover-shadow); }
+.service-icon { font-size: 34px; }
+.service-name, .consult-title { font-size: 17px; font-weight: 700; color: var(--text); }
+.service-desc, .consult-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; }
+.service-meta, .consult-meta { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--text-faint); flex-wrap: wrap; }
+.service-meta .price, .consult-meta .price { font-size: 18px; font-weight: 700; color: var(--accent); }
+.service-meta .price.free { color: var(--success); }
+.consult-expert { font-size: 13px; color: var(--accent); font-weight: 600; }
+.service-footer, .consult-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.service-footer .btn, .consult-footer .btn { margin: 0; }
+
+.review-card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 18px 20px; }
+.review-card .stars { color: var(--star); font-size: 15px; }
+.review-author { font-weight: 700; color: var(--text); margin-top: 8px; }
+.review-role { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.review-text { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-top: 10px; }
+
+.consult-form { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 22px; max-width: 480px; }
+.consult-form h3 { margin-bottom: 16px; }
+.consult-form .form-group textarea { min-height: 110px; }
+
 .card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 20px; transition: background .25s; }
 .btn {
   display: inline-block; padding: 10px 20px; border: none; border-radius: 8px;
@@ -139,9 +199,22 @@ body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color:
 .lesson-item.locked .lesson-status { color: var(--text-faint); }
 .badge-free { background: var(--success); color: #fff; margin-left: 6px; vertical-align: middle; }
 
-.lesson-view { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-top: 24px; }
+.lesson-view { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-top: 24px; position: relative; overflow: hidden; }
 .lesson-view h3 { margin-bottom: 12px; color: var(--text); }
 .lesson-view p { color: var(--text-dim); line-height: 1.7; }
+.lesson-view, .lesson-view * { user-select: none; -webkit-user-select: none; }
+.lesson-view video, .lesson-view audio, .lesson-view img { pointer-events: none; }
+.lesson-view .video-wrap, .lesson-view .media-wrap { pointer-events: auto; }
+.lesson-view .video-wrap video, .lesson-view .media-wrap video,
+.lesson-view .video-wrap audio, .lesson-view .media-wrap audio { pointer-events: auto; }
+.lesson-watermark {
+  position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); opacity: .18; font-size: 22px; font-weight: 700;
+  transform: rotate(-18deg); white-space: nowrap; letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.lesson-protect-note { margin-top: 12px; padding: 8px 12px; font-size: 12px; color: var(--text-faint); background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; text-align: center; }
 
 .reviews { margin-top: 32px; }
 .review-item { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }

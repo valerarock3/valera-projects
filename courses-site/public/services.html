@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Услуги</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="services">Услуги</h1>
+    <div class="card-grid" id="services-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+  async function loadServices() {
+    const grid = document.getElementById("services-grid");
+    grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
+    try {
+      const data = await apiFetch("/api/services");
+      if (!data.length) { grid.innerHTML = `<div class="empty">${t("noServices")}</div>`; return; }
+      grid.innerHTML = data.map(s => `
+        <div class="service-card">
+          <span class="service-icon">${escapeHtml(s.icon || "💆")}</span>
+          <span class="service-name">${escapeHtml(s.name)}</span>
+          <span class="service-desc">${escapeHtml(s.description || "")}</span>
+          <div class="service-meta">
+            <span>⏱ ${s.duration_min || 0} ${t("minLabel")}</span>
+            <span class="price">${fmtPrice(s.price)}</span>
+          </div>
+          <div class="service-footer">
+            <button class="btn btn-primary btn-sm" onclick="alert('${t("order")}: ${escapeHtml(s.name).replace(/'/g, "\\'")}')">${t("order")}</button>
+          </div>
+        </div>
+      `).join("");
+    } catch (err) {
+      grid.innerHTML = `<div class="empty">${err.message}</div>`;
+    }
+  }
+  loadServices();
+  </script>
+</body>
+</html>

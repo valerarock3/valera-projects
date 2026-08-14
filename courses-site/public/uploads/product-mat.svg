@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7a4f9e"/>
+      <stop offset="1" stop-color="#a984c9"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g stroke="#ffffff" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M110 150 c 0 -58 180 -58 180 0 l 0 26 c 0 12 -36 12 -60 12 l -60 0 c -24 0 -60 0 -60 -12 z"/>
+    <path d="M110 152 c 0 26 180 26 180 0"/>
+    <path d="M160 60 c -6 14 -6 24 0 32"/>
+  </g>
+  <rect x="20" y="172" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#5a3678">Коврик для тайского массажа</text>
+</svg>

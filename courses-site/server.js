@@ -410,28 +410,46 @@ app.get("/api/instructors/:id", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get("/api/courses/:courseId/lessons/:lessonId/print", requireAuth, async (req, res) => {
+// Разделы главной страницы: товары, услуги, консультации, отзывы
+app.get("/api/products", async (_req, res) => {
   try {
-    const [enr] = await pool.query(
-      "SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ?",
-      [req.session.user.id, req.params.courseId]
+    const [rows] = await pool.query("SELECT * FROM products ORDER BY category, name");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/services", async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM services ORDER BY name");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/consultations", async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM consultations ORDER BY price");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get("/api/site-reviews", async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM site_reviews ORDER BY created_at DESC LIMIT 50");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/consultations/request", async (req, res) => {
+  const { name, phone, consultationId } = req.body || {};
+  if (!name || !phone) return res.status(400).json({ error: "Заполните имя и телефон" });
+  try {
+    const [rows] = await pool.query("SELECT title FROM consultations WHERE id = ?", [consultationId || 0]);
+    const subject = rows.length ? rows[0].title : "Консультация";
+    await pool.query(
+      "INSERT INTO consultation_requests (name, phone, subject) VALUES (?, ?, ?)",
+      [String(name).trim(), String(phone).replace(/\D/g, ""), subject]
     );
-    if (!enr.length) {
-      return res.status(403).json({ error: "Сначала оплатите и запишитесь на курс" });
-    }
-    const [rows] = await pool.query(
-      `SELECT l.*, c.title AS course_title FROM lessons l
-       JOIN courses c ON c.id = l.course_id
-       WHERE l.id = ? AND l.course_id = ?`,
-      [req.params.lessonId, req.params.courseId]
-    );
-    if (!rows.length) return res.status(404).json({ error: "Урок не найден" });
-    const lesson = rows[0];
-    const quiz = parseQuiz(lesson.quiz);
-    const base = `${req.protocol}://${req.get("host")}`;
-    const html = buildLessonHtml(lesson, quiz, base, { print: true });
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.send(html);
+    res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -955,10 +973,88 @@ async function seed() {
   );
 }
 
+// Тестовые данные разделов главной страницы. Заполняет только пустые таблицы,
+// поэтому безопасно вызывать на каждом старте (дополняет существующую БД).
+async function seedSections() {
+  const [p] = await pool.query("SELECT COUNT(*) AS c FROM products");
+  if (!p[0].c) {
+    const products = [
+      ["Масло для массажа «Атлас» 200 мл", "Питательное массажное масло с витамином Е, без запаха. Подходит для классического и спортивного массажа.", 790, "/uploads/product-oil.svg", "Масла и кремы", 1],
+      ["Крем для тела «Нежность» 150 мл", "Увлажняющий крем для ежедневного ухода и массажа, быстро впитывается.", 650, "/uploads/product-cream.svg", "Масла и кремы", 1],
+      ["Ролл для миофасциального релиза", "Массажный ролл средней жёсткости для самостоятельной проработки мышц и фасций.", 1290, "/uploads/product-roller.svg", "Инструменты", 1],
+      ["Коврик для тайского массажа", "Складной коврик с мягким наполнителем для практик на полу.", 2490, "/uploads/product-mat.svg", "Инструменты", 1],
+      ["Массажная палочка «Прогрев»", "Удобная палочка для точечного давления на триггерные точки.", 490, "/uploads/product-stick.svg", "Инструменты", 1],
+      ["Полотенце банное 100×150", "Мягкое банное полотенце из 100% хлопка для кабинета.", 850, "/uploads/product-towel.svg", "Кабинет", 0],
+    ];
+    for (const pr of products) {
+      await pool.query(
+        "INSERT INTO products (name, description, price, image_url, category, in_stock) VALUES (?, ?, ?, ?, ?, ?)",
+        pr
+      );
+    }
+    console.log("Раздел «Товары»: добавлено", products.length, "позиций");
+  }
+
+  const [s] = await pool.query("SELECT COUNT(*) AS c FROM services");
+  if (!s[0].c) {
+    const services = [
+      ["Классический массаж", "Полный сеанс классического массажа: разогрев, глубокая проработка мышц, расслабление.", 2000, 60, "💆"],
+      ["Массаж спины и шеи", "Лечебный массаж шейно-воротниковой зоны: снятие спазма, работа с триггерными точками.", 1500, 45, "🦴"],
+      ["Спортивный массаж", "Восстановление после нагрузок: снятие крепатуры, возвращение тонуса мышцам.", 2200, 60, "🏋️"],
+      ["Тайский массаж", "Традиционный тайский массаж: стрейчинг, давление вдоль сен-линий, 90 минут релакса.", 3500, 90, "🧘"],
+      ["Детский массаж", "Нежный массаж и гимнастика для малышей: снятие колик, укрепление мышц.", 1200, 30, "👶"],
+      ["Лимфодренажный массаж", "Мягкая техника для снятия отёков и улучшения лимфотока.", 1800, 50, "🌊"],
+    ];
+    for (const sv of services) {
+      await pool.query(
+        "INSERT INTO services (name, description, price, duration_min, icon) VALUES (?, ?, ?, ?, ?)",
+        sv
+      );
+    }
+    console.log("Раздел «Услуги»: добавлено", services.length, "позиций");
+  }
+
+  const [c] = await pool.query("SELECT COUNT(*) AS c FROM consultations");
+  if (!c[0].c) {
+    const consultations = [
+      ["Разбор осанки и болей в спине", "Онлайн-консультация с врачом-реабилитологом: разберём причины болей и составим план.", 1500, 30, "Сергей Морозов"],
+      ["Подбор курса массажа", "Поможем выбрать программу обучения под ваши цели и опыт.", 0, 20, "Ирина Соколова"],
+      ["Консультация по детскому массажу", "Индивидуальные рекомендации по массажу и гимнастике для вашего малыша.", 1000, 25, "Елена Кузнецова"],
+      ["Техника тайского массажа", "Личный разбор техник давления и стрейчинга для практикующих.", 1800, 40, "Ким Сурайя"],
+    ];
+    for (const co of consultations) {
+      await pool.query(
+        "INSERT INTO consultations (title, description, price, duration_min, expert) VALUES (?, ?, ?, ?, ?)",
+        co
+      );
+    }
+    console.log("Раздел «Консультации»: добавлено", consultations.length, "позиций");
+  }
+
+  const [r] = await pool.query("SELECT COUNT(*) AS c FROM site_reviews");
+  if (!r[0].c) {
+    const reviews = [
+      ["Анна К.", "Выпускница курса «Классический массаж»", 5, "Прошла курс с нуля — теперь принимаю клиентов дома. Очень понятная подача и отличные видеоуроки!"],
+      ["Дмитрий П.", "Клиент", 5, "Записался на сеанс спортивного массажа — спина как новая. Рекомендую!"],
+      ["Марина В.", "Выпускница курса «Детский массаж»", 5, "Малыш стал спать лучше, колики прошли. Спасибо за курс!"],
+      ["Олег С.", "Клиент", 4, "Тайский массаж — это что-то невероятное. Мастер — профессионал своего дела."],
+      ["Екатерина Л.", "Выпускница курса «Лечебный массаж»", 5, "Практика с триггерными точками реально работает. Благодарю преподавателей!"],
+    ];
+    for (const rv of reviews) {
+      await pool.query(
+        "INSERT INTO site_reviews (author, role, rating, text) VALUES (?, ?, ?, ?)",
+        rv
+      );
+    }
+    console.log("Раздел «Отзывы»: добавлено", reviews.length, "отзывов");
+  }
+}
+
 app.listen(PORT, async () => {
   try {
     await initSchema();
     await seed();
+    await seedSections();
     console.log(`Сайт курсов запущен: http://localhost:${PORT}`);
     console.log("Админ: admin@courses.ru / admin123");
     console.log("Пользователь: user@courses.ru / user123");

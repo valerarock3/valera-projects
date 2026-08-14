@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3f87a8"/>
+      <stop offset="1" stop-color="#6fb6d4"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g stroke="#ffffff" stroke-width="6" stroke-linecap="round" fill="none">
+    <path d="M140 120 l 120 0 l 0 26 c 0 14 -10 24 -24 24 l -72 0 c -14 0 -24 -10 -24 -24 z"/>
+    <path d="M140 120 l -12 -20 c -4 -8 2 -16 10 -16 l 0 0 c 8 0 14 8 10 16 l -8 20"/>
+    <path d="M260 120 l 12 -20 c 4 -8 -2 -16 -10 -16 l 0 0 c -8 0 -14 8 -10 16 l 8 20"/>
+  </g>
+  <rect x="20" y="172" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#2f6b87">Банное полотенце</text>
+</svg>

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220" viewBox="0 0 400 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b9e56"/>
+      <stop offset="1" stop-color="#8cc987"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="220" rx="14" fill="url(#g)"/>
+  <circle cx="330" cy="40" r="60" fill="#ffffff" opacity="0.08"/>
+  <circle cx="70" cy="190" r="70" fill="#ffffff" opacity="0.08"/>
+  <g stroke="#ffffff" stroke-width="6" stroke-linecap="round" fill="none">
+    <rect x="140" y="70" width="120" height="64" rx="30"/>
+    <circle cx="120" cy="102" r="18"/>
+    <circle cx="280" cy="102" r="18"/>
+    <path d="M120 84 v -8"/>
+    <path d="M280 84 v -8"/>
+  </g>
+  <rect x="20" y="172" width="360" height="32" rx="8" fill="#ffffff" opacity="0.92"/>
+  <text x="200" y="194" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#3f7a3b">Ролл для МФР</text>
+</svg>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Консультация</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="sectionConsultation">Консультация специалиста</h1>
+    <div class="card-grid" id="consultations-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+
+    <div class="section">
+      <div class="consult-form" id="consult-form">
+        <h3 data-i18n="bookConsultation">Записаться на консультацию</h3>
+        <div class="form-group">
+          <label data-i18n="yourName">Ваше имя</label>
+          <input type="text" id="consult-name" data-i18n-ph="yourNamePh">
+        </div>
+        <div class="form-group">
+          <label data-i18n="yourPhone">Ваш телефон</label>
+          <input type="tel" id="consult-phone" placeholder="+7 (999) 123-45-67">
+        </div>
+        <div class="form-group">
+          <label data-i18n="consultAsk">Задайте вопрос специалисту</label>
+          <textarea id="consult-ask" data-i18n-ph="consultAskPh"></textarea>
+        </div>
+        <button class="btn btn-primary" id="consult-send" data-i18n="sendRequest">Отправить заявку</button>
+        <div class="form-error" id="consult-error"></div>
+        <div class="form-hint" id="consult-ok" style="display:none" data-i18n="requestSent">Заявка отправлена! Мы свяжемся с вами в ближайшее время.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+  async function loadConsultations() {
+    const grid = document.getElementById("consultations-grid");
+    grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
+    try {
+      const data = await apiFetch("/api/consultations");
+      if (!data.length) { grid.innerHTML = `<div class="empty">${t("noConsultations")}</div>`; return; }
+      grid.innerHTML = data.map(c => `
+        <div class="consult-card">
+          <span class="consult-title">${escapeHtml(c.title)}</span>
+          <span class="consult-expert">${t("expert")}: ${escapeHtml(c.expert || "")}</span>
+          <span class="consult-desc">${escapeHtml(c.description || "")}</span>
+          <div class="consult-meta">
+            <span>⏱ ${c.duration_min || 0} ${t("minLabel")}</span>
+            <span class="price ${Number(c.price) === 0 ? "free" : ""}">${Number(c.price) === 0 ? t("free") : fmtPrice(c.price)}</span>
+          </div>
+          <div class="consult-footer">
+            <button class="btn btn-primary btn-sm" onclick="bookConsultation(${c.id}, '${escapeHtml(c.title).replace(/'/g, "\\'")}')">${t("bookConsultation")}</button>
+          </div>
+        </div>
+      `).join("");
+    } catch (err) {
+      grid.innerHTML = `<div class="empty">${err.message}</div>`;
+    }
+  }
+
+  function bookConsultation(id, title) {
+    document.getElementById("consult-form").scrollIntoView({ behavior: "smooth" });
+    document.getElementById("consult-ask").value = title;
+    document.getElementById("consult-ask").focus();
+  }
+
+  document.getElementById("consult-send").addEventListener("click", async () => {
+    const err = document.getElementById("consult-error");
+    err.classList.remove("show");
+    const name = document.getElementById("consult-name").value.trim();
+    const phone = document.getElementById("consult-phone").value.trim();
+    if (!name || !phone) {
+      err.textContent = t("fillAll");
+      err.classList.add("show");
+      return;
+    }
+    try {
+      await apiFetch("/api/consultations/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, phone }),
+      });
+      document.getElementById("consult-form").style.display = "none";
+      document.getElementById("consult-ok").style.display = "block";
+    } catch (e) {
+      err.textContent = e.message;
+      err.classList.add("show");
+    }
+  });
+
+  loadConsultations();
+  </script>
+</body>
+</html>

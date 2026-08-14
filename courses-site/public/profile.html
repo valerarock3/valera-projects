@@ -30,7 +30,7 @@
       }
       const courses = await apiFetch("/api/my");
       if (!courses.length) {
-        container.innerHTML = `<div class="empty">${t("noCoursesYet")}<br><a href="index.html" style="color:var(--accent)">${t("enterToCatalog")}</a></div>`;
+        container.innerHTML = `<div class="empty">${t("noCoursesYet")}<br><a href="catalog.html" style="color:var(--accent)">${t("enterToCatalog")}</a></div>`;
         return;
       }
       try {

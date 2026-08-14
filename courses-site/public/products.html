@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Товары</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="products">Товары</h1>
+    <div class="card-grid" id="products-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+  async function loadProducts() {
+    const grid = document.getElementById("products-grid");
+    grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
+    try {
+      const data = await apiFetch("/api/products");
+      if (!data.length) { grid.innerHTML = `<div class="empty">${t("noProducts")}</div>`; return; }
+      grid.innerHTML = data.map(p => `
+        <div class="product-card">
+          <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
+          <div class="product-body">
+            <div class="product-cat">${escapeHtml(p.category || "")}</div>
+            <div class="product-name">${escapeHtml(p.name)}</div>
+            <div class="product-desc">${escapeHtml(p.description || "")}</div>
+            <div class="product-bottom">
+              <span class="product-price">${fmtPrice(p.price)}</span>
+              <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="alert('${t("order")}: ${escapeHtml(p.name).replace(/'/g, "\\'")}')">${t("buy")}</button>
+          </div>
+        </div>
+      `).join("");
+    } catch (err) {
+      grid.innerHTML = `<div class="empty">${err.message}</div>`;
+    }
+  }
+  loadProducts();
+  </script>
+</body>
+</html>
