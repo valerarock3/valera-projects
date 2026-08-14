@@ -3,6 +3,9 @@
 $base = "C:\Users\valera333\Desktop\vork\valera-projects-master\courses-site"
 $mysqld = "C:\OSPanel\modules\database\MySQL-8.0-Win10\bin\mysqld.exe"
 $ini = "C:\Users\valera333\AppData\Local\Temp\opencode\my-mysql.ini"
+if (-not (Test-Path -LiteralPath $ini)) {
+  $ini = "C:\OSPanel\modules\database\MySQL-8.0-Win10\my.ini"
+}
 $node = "C:\Program Files\nodejs\node.exe"
 $php = "C:\OSPanel\modules\php\PHP_8.1\php.exe"
 $pmaDir = Join-Path $base "phpmyadmin"
