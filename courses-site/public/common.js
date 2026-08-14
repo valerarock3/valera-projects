@@ -22,6 +22,18 @@ function courseCover(c) {
   return escapeHtml(c.image_url || "/uploads/course-default.svg");
 }
 
+function pluralViews(n) {
+  const k = Math.abs(Number(n) || 0) % 100;
+  if (k >= 11 && k <= 19) return t("viewsWord5");
+  const m = k % 10;
+  if (lang === "ru") {
+    if (m === 1) return t("viewsWord1");
+    if (m >= 2 && m <= 4) return t("viewsWord2");
+    return t("viewsWord5");
+  }
+  return t("viewsWord");
+}
+
 function escapeHtml(s) {
   return String(s ?? "")
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
@@ -95,11 +107,13 @@ function renderNav() {
   const themeBtn = `<button class="icon-btn" id="theme-btn" title="${theme === "dark" ? t("themeLight") : t("themeDark")}">${theme === "dark" ? "☀" : "🌙"}</button>`;
   const langBtn = `<button class="icon-btn" id="lang-btn" title="Language">${lang === "ru" ? "🇬🇧" : "🇷🇺"}</button>`;
   const sLinks = sectionLinks();
+  const cartLink = `<a class="nav-btn cart-link" href="cart.html" data-i18n-title="cart">🛒<span class="cart-badge" id="cart-badge"></span></a>`;
   fetchMe().then(user => {
     if (user) {
       const adminLink = user.role === "admin" ? `<a class="nav-btn" href="admin.html" data-i18n="admin">${t("admin")}</a>` : "";
       nav.innerHTML = `
         ${sLinks}
+        ${cartLink}
         ${themeBtn}
         ${langBtn}
         ${adminLink}
@@ -114,6 +128,7 @@ function renderNav() {
     } else {
       nav.innerHTML = `
         ${sLinks}
+        ${cartLink}
         ${themeBtn}
         ${langBtn}
         <a class="nav-btn" href="register.html" data-i18n="registration">${t("registration")}</a>
@@ -121,6 +136,7 @@ function renderNav() {
     }
     wireNavButtons();
     wireNavToggle();
+    renderCartBadge();
   });
 }
 
@@ -151,6 +167,82 @@ function wireNavButtons() {
   if (themeBtn) themeBtn.addEventListener("click", () => setTheme(theme === "dark" ? "light" : "dark"));
   const langBtn = document.getElementById("lang-btn");
   if (langBtn) langBtn.addEventListener("click", () => setLang(lang === "ru" ? "en" : "ru"));
+}
+
+function renderPagination(container, current, total, onGo) {
+  container.innerHTML = "";
+  if (total <= 1) return;
+  const mk = (label, page, opts = {}) => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.disabled = !!opts.disabled;
+    if (opts.active) b.classList.add("active");
+    b.addEventListener("click", () => onGo(page));
+    container.appendChild(b);
+  };
+  mk("‹", current - 1, { disabled: current <= 1 });
+  let pages = [];
+  for (let p = 1; p <= total; p++) {
+    if (p === 1 || p === total || Math.abs(p - current) <= 1) pages.push(p);
+    else if (pages[pages.length - 1] !== "…") pages.push("…");
+  }
+  pages.forEach(p => {
+    if (p === "…") { const s = document.createElement("span"); s.textContent = "…"; s.style.color = "var(--text-faint)"; container.appendChild(s); }
+    else mk(String(p), p, { active: p === current });
+  });
+  mk("›", current + 1, { disabled: current >= total });
+}
+
+function pageFromUrl() {
+  const p = Number(new URLSearchParams(location.search).get("page"));
+  return Number.isInteger(p) && p > 0 ? p : 1;
+}
+
+// Хлебные крошки: parts = [{text, href}, ...], последний элемент — текущая страница
+function breadcrumbs(parts) {
+  return `<nav class="breadcrumbs" aria-label="Breadcrumb">${parts.map((p, i) => {
+    const isLast = i === parts.length - 1;
+    const body = isLast
+      ? `<span class="crumb-current">${escapeHtml(p.text)}</span>`
+      : `<a class="crumb-link" href="${escapeHtml(p.href)}">${escapeHtml(p.text)}</a>`;
+    return `${body}${isLast ? "" : '<span class="crumb-sep">›</span>'}`;
+  }).join("")}</nav>`;
+}
+
+// Корзина товаров (localStorage)
+function getCart() {
+  try { return JSON.parse(localStorage.getItem("cart") || "[]"); } catch { return []; }
+}
+function saveCart(cart) {
+  localStorage.setItem("cart", JSON.stringify(cart));
+  renderCartBadge();
+}
+function addToCart(id, qty) {
+  const cart = getCart();
+  const line = cart.find(i => i.id === id);
+  if (line) line.qty = Math.min(99, (Number(line.qty) || 1) + (Number(qty) || 1));
+  else cart.push({ id, qty: Math.min(99, Number(qty) || 1) });
+  saveCart(cart);
+}
+function setCartQty(id, qty) {
+  const cart = getCart();
+  const line = cart.find(i => i.id === id);
+  if (!line) return;
+  if (Number(qty) > 0) line.qty = Math.min(99, Number(qty));
+  saveCart(cart.filter(i => i.qty > 0));
+}
+function removeFromCart(id) {
+  saveCart(getCart().filter(i => i.id !== id));
+}
+function cartCount() {
+  return getCart().reduce((s, i) => s + (Number(i.qty) || 0), 0);
+}
+function renderCartBadge() {
+  const el = document.getElementById("cart-badge");
+  if (!el) return;
+  const n = cartCount();
+  el.textContent = n;
+  el.style.display = n ? "flex" : "none";
 }
 
 function fmtPrice(price) {
@@ -188,6 +280,8 @@ function translateError(msg) {
     "Сначала запросите SMS-код": t("smsFirstRequest"),
     "Код истёк. Запросите новый.": t("smsExpired"),
     "Неверный SMS-код": t("smsWrong"),
+    "Корзина пуста": t("cartEmpty"),
+    "Товар не найден": t("productNotFound"),
     "Нельзя удалить самого себя": t("delSelfBlocked"),
     "Нельзя удалить последнего администратора": t("delLastAdmin"),
     "Пользователь не найден": t("userNotFound"),

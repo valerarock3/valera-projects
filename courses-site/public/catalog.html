@@ -19,32 +19,50 @@
       <p class="page-sub" data-i18n="catalogSub">Выберите курс и начните обучение прямо сейчас</p>
     </div>
     <div class="courses-grid" id="courses-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+    <div class="pagination" id="pagination"></div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
+  const PER_PAGE = 9;
+  let allCourses = [];
+
+  function renderCourses() {
+    const grid = document.getElementById("courses-grid");
+    const page = pageFromUrl();
+    const total = Math.ceil(allCourses.length / PER_PAGE);
+    const start = (page - 1) * PER_PAGE;
+    const items = allCourses.slice(start, start + PER_PAGE);
+    if (!items.length) { grid.innerHTML = `<div class="empty">${t("notFound")}</div>`; return; }
+    grid.innerHTML = items.map(c => `
+      <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
+        <img src="${courseCover(c)}" alt="">
+        <div class="course-body">
+          <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
+          <div class="course-title">${escapeHtml(c.title)}</div>
+          <div class="course-desc">${escapeHtml((c.description || "").slice(0, 90))}</div>
+          <div class="course-meta">
+            <span class="course-price">${fmtPrice(c.price)}</span>
+            <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
+          </div>
+          <div class="course-instructor">${escapeHtml(c.inst_name || (c.instructor_info && c.instructor_info.name) || "")}</div>
+        </div>
+      </div>
+    `).join("");
+    renderPagination(document.getElementById("pagination"), Math.min(page, total), total, p => {
+      const url = new URL(location.href);
+      url.searchParams.set("page", p);
+      location.href = url.toString();
+    });
+  }
+
   async function loadCourses() {
     const grid = document.getElementById("courses-grid");
     grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
     try {
-      const data = await apiFetch("/api/courses");
-      if (!data.length) { grid.innerHTML = `<div class="empty">${t("notFound")}</div>`; return; }
-      grid.innerHTML = data.map(c => `
-        <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
-          <img src="${courseCover(c)}" alt="">
-          <div class="course-body">
-            <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
-            <div class="course-title">${escapeHtml(c.title)}</div>
-            <div class="course-desc">${escapeHtml((c.description || "").slice(0, 90))}</div>
-            <div class="course-meta">
-              <span class="course-price">${fmtPrice(c.price)}</span>
-              <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
-            </div>
-            <div class="course-instructor">${escapeHtml(c.inst_name || (c.instructor_info && c.instructor_info.name) || "")}</div>
-          </div>
-        </div>
-      `).join("");
+      allCourses = await apiFetch("/api/courses");
+      renderCourses();
     } catch (err) {
       grid.innerHTML = `<div class="empty">${err.message}</div>`;
     }

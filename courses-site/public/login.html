@@ -26,13 +26,17 @@
         <input type="password" id="password" placeholder="••••••••">
       </div>
       <button class="btn btn-primary" id="login-btn" data-i18n="loginBtn">Войти</button>
-      <div class="form-hint" data-i18n="noAccount">Нет аккаунта? <a href="register.html" data-i18n="registration">Зарегистрироваться</a></div>
+      <div class="form-hint"><a href="forgot-password.html" data-i18n="forgotPass">Забыли пароль?</a></div>
+      <div class="form-hint" data-i18n="noAccount">Нет аккаунта? <a href="register.html" id="reg-link" data-i18n="registration">Зарегистрироваться</a></div>
     </div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
+    const next = new URLSearchParams(location.search).get("next") || "";
+    if (next) document.getElementById("reg-link").href = "register.html?next=" + encodeURIComponent(next);
+
     document.getElementById("login-btn").addEventListener("click", async (e) => {
       const btn = e.target;
       btn.disabled = true;
@@ -45,7 +49,7 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        window.location.href = data.user.role === "admin" ? "admin.html" : "index.html";
+        window.location.href = data.user.role === "admin" ? "admin.html" : (next || "index.html");
       } catch (err) { showError(btn, err.message); }
     });
 

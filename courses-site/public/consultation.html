@@ -45,6 +45,8 @@
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
+  let me = null;
+
   async function loadConsultations() {
     const grid = document.getElementById("consultations-grid");
     grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
@@ -71,36 +73,59 @@
   }
 
   function bookConsultation(id, title) {
+    if (!me) {
+      location.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search);
+      return;
+    }
     document.getElementById("consult-form").scrollIntoView({ behavior: "smooth" });
     document.getElementById("consult-ask").value = title;
     document.getElementById("consult-ask").focus();
   }
 
-  document.getElementById("consult-send").addEventListener("click", async () => {
-    const err = document.getElementById("consult-error");
-    err.classList.remove("show");
-    const name = document.getElementById("consult-name").value.trim();
-    const phone = document.getElementById("consult-phone").value.trim();
-    if (!name || !phone) {
-      err.textContent = t("fillAll");
-      err.classList.add("show");
+  async function gateForm() {
+    me = await fetchMe();
+    const form = document.getElementById("consult-form");
+    if (!me) {
+      const next = encodeURIComponent(location.pathname + location.search);
+      form.innerHTML = `
+        <div class="card" style="padding:24px;text-align:center">
+          <p style="margin-bottom:16px">${t("loginToOrder")}</p>
+          <div class="form-actions" style="justify-content:center">
+            <a class="btn btn-primary" href="login.html?next=${next}">${t("login")}</a>
+            <a class="btn btn-outline" href="register.html?next=${next}">${t("registration")}</a>
+          </div>
+        </div>`;
       return;
     }
-    try {
-      await apiFetch("/api/consultations/request", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, phone }),
-      });
-      document.getElementById("consult-form").style.display = "none";
-      document.getElementById("consult-ok").style.display = "block";
-    } catch (e) {
-      err.textContent = e.message;
-      err.classList.add("show");
-    }
-  });
+    document.getElementById("consult-name").value = me.name || "";
+
+    document.getElementById("consult-send").addEventListener("click", async () => {
+      const err = document.getElementById("consult-error");
+      err.classList.remove("show");
+      const name = document.getElementById("consult-name").value.trim();
+      const phone = document.getElementById("consult-phone").value.trim();
+      if (!name || !phone) {
+        err.textContent = t("fillAll");
+        err.classList.add("show");
+        return;
+      }
+      try {
+        await apiFetch("/api/consultations/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, phone }),
+        });
+        document.getElementById("consult-form").style.display = "none";
+        document.getElementById("consult-ok").style.display = "block";
+      } catch (e) {
+        err.textContent = e.message;
+        err.classList.add("show");
+      }
+    });
+  }
 
   loadConsultations();
+  gateForm();
 
   const subjectParam = new URLSearchParams(location.search).get("subject");
   if (subjectParam) {

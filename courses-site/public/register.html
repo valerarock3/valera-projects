@@ -34,13 +34,16 @@
         <input type="password" id="password" placeholder="••••••••">
       </div>
       <button class="btn btn-primary" id="register-btn" data-i18n="registerBtn">Зарегистрироваться</button>
-      <div class="form-hint" data-i18n="haveAccount">Уже есть аккаунт? <a href="login.html" data-i18n="login">Войти</a></div>
+      <div class="form-hint" data-i18n="haveAccount">Уже есть аккаунт? <a href="login.html" id="login-link" data-i18n="login">Войти</a></div>
     </div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
+    const next = new URLSearchParams(location.search).get("next") || "";
+    if (next) document.getElementById("login-link").href = "login.html?next=" + encodeURIComponent(next);
+
     document.getElementById("register-btn").addEventListener("click", async (e) => {
       const btn = e.target;
       btn.disabled = true;
@@ -55,7 +58,7 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        window.location.href = "index.html";
+        window.location.href = next || "index.html";
       } catch (err) { showError(btn, err.message); }
     });
 

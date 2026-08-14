@@ -49,14 +49,18 @@
         : "—";
 
       container.innerHTML = `
-        <a href="catalog.html" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()};text-decoration:none;font-size:14px" data-i18n="backToCatalog">← Назад к каталогу</a>
+        ${breadcrumbs([
+          { text: t("home"), href: "index.html" },
+          { text: t("sectionCourses"), href: "catalog.html" },
+          { text: course.title },
+        ])}
         <div class="course-detail-grid mt-16">
           <div class="course-hero">
             ${heroMediaHtml(course)}
             <div class="cat">${escapeHtml(course.category_name) || t("noCategory")}</div>
             <h1>${escapeHtml(course.title)}</h1>
             <div class="desc">${escapeHtml(course.description || "")}</div>
-            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length})</div>
+            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length}) · 👁 ${Number(course.views) || 0} ${pluralViews(course.views)}</div>
             ${authorCardHtml()}
 
             <div class="lesson-list">

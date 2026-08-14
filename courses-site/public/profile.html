@@ -15,14 +15,19 @@
 
   <div class="container">
     <h1 class="page-title" data-i18n="myCourses">Мои курсы</h1>
-    <div id="my-courses"><div class="loading">Загрузка...</div></div>
+    <div class="profile-tabs">
+      <button class="profile-tab active" data-tab="courses" data-i18n="myCourses">Мои курсы</button>
+      <button class="profile-tab" data-tab="payments" data-i18n="myPayments">Мои платежи</button>
+    </div>
+    <div id="tab-courses"><div class="loading">Загрузка...</div></div>
+    <div id="tab-payments" style="display:none"></div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
-    async function load() {
-      const container = document.getElementById("my-courses");
+    async function loadCourses() {
+      const container = document.getElementById("tab-courses");
       const me = await fetchMe();
       if (!me) {
         container.innerHTML = `<div class="empty">${t("loginToSee")} <br><a href="login.html" style="color:var(--accent)">${t("login")}</a></div>`;
@@ -33,29 +38,79 @@
         container.innerHTML = `<div class="empty">${t("noCoursesYet")}<br><a href="catalog.html" style="color:var(--accent)">${t("enterToCatalog")}</a></div>`;
         return;
       }
-      try {
-        container.innerHTML = courses.map(c => `
-          <div class="my-card" onclick="location.href='course.html?id=${c.id}'">
-            <img src="${courseCover(c)}" alt="">
-            <div>
-              <div class="mc-title">${escapeHtml(c.title)}</div>
-              <div class="mc-meta">${t("instructorWord")}: ${c.instructor_info && c.instructor_info.id
-                ? `<a class="author-link" href="author.html?id=${c.instructor_info.id}" onclick="event.stopPropagation()">${escapeHtml(c.instructor_info.name)}</a>`
-                : escapeHtml(c.instructor) || "—"}</div>
-            </div>
-            <div class="mc-progress">
-              <div class="pct">${c.progress}%</div>
-              <div class="progress-track"><div class="fill" style="width:${c.progress}%"></div></div>
-            </div>
-          </div>`).join("");
-      } catch (err) {
-        container.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      container.innerHTML = courses.map(c => `
+        <div class="my-card" onclick="location.href='course.html?id=${c.id}'">
+          <img src="${courseCover(c)}" alt="">
+          <div>
+            <div class="mc-title">${escapeHtml(c.title)}</div>
+            <div class="mc-meta">${t("instructorWord")}: ${c.instructor_info && c.instructor_info.id
+              ? `<a class="author-link" href="author.html?id=${c.instructor_info.id}" onclick="event.stopPropagation()">${escapeHtml(c.instructor_info.name)}</a>`
+              : escapeHtml(c.instructor) || "—"}</div>
+          </div>
+          <div class="mc-progress">
+            <div class="pct">${c.progress}%</div>
+            <div class="progress-track"><div class="fill" style="width:${c.progress}%"></div></div>
+          </div>
+        </div>`).join("");
+    }
+
+    async function loadPayments() {
+      const container = document.getElementById("tab-payments");
+      const me = await fetchMe();
+      if (!me) {
+        container.innerHTML = `<div class="empty">${t("loginToSee")}</div>`;
+        return;
       }
+      let rows;
+      try { rows = await apiFetch("/api/my/payments"); }
+      catch (err) { container.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`; return; }
+      if (!rows.length) {
+        container.innerHTML = `<div class="empty">${t("noPaymentsYet")}</div>`;
+        return;
+      }
+      container.innerHTML = `
+        <div class="card" style="padding:0;overflow:hidden">
+          <table class="table payments-table">
+            <thead>
+              <tr>
+                <th>${t("dateCol")}</th>
+                <th>${t("courseWord")}</th>
+                <th>${t("methodCol")}</th>
+                <th>${t("amountCol")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(p => `
+                <tr>
+                  <td>${new Date(p.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}</td>
+                  <td>${escapeHtml(p.course_title)}</td>
+                  <td class="pay-method">${escapeHtml((p.method || "").toUpperCase())}</td>
+                  <td class="pay-amount">${fmtPrice(p.amount)}</td>
+                </tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function wireTabs() {
+      document.querySelectorAll(".profile-tab").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".profile-tab").forEach(b => b.classList.toggle("active", b === btn));
+          const tab = btn.dataset.tab;
+          document.getElementById("tab-courses").style.display = tab === "courses" ? "block" : "none";
+          document.getElementById("tab-payments").style.display = tab === "payments" ? "block" : "none";
+          if (tab === "payments" && !document.getElementById("tab-payments").dataset.loaded) {
+            document.getElementById("tab-payments").dataset.loaded = "1";
+            loadPayments();
+          }
+        });
+      });
     }
 
     initTheme();
     renderNav();
-    load();
+    wireTabs();
+    loadCourses();
   </script>
 </body>
 </html>

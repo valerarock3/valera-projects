@@ -57,7 +57,11 @@
       const avg = a.avg_rating;
       const hasBio = a.bio && a.bio.trim();
       container.innerHTML = `
-        <a href="catalog.html" style="color:${getComputedStyle(document.documentElement).getPropertyValue('--accent').trim()};text-decoration:none;font-size:14px" data-i18n="backToCatalog">← Назад к каталогу</a>
+        ${breadcrumbs([
+          { text: t("home"), href: "index.html" },
+          { text: t("sectionCourses"), href: "catalog.html" },
+          { text: a.name },
+        ])}
 
         <div class="author-header card">
           <img class="author-avatar" src="${escapeHtml(a.avatar || "/uploads/course-default.svg")}" alt="">

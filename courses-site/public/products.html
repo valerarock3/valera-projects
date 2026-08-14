@@ -19,32 +19,63 @@
       <p class="page-sub" data-i18n="productsSub">Масла, инструменты и всё необходимое для кабинета массажиста</p>
     </div>
     <div class="card-grid" id="products-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+    <div class="pagination" id="pagination"></div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
+  const PER_PAGE = 12;
+  let allProducts = [];
+
+  function renderProducts() {
+    const grid = document.getElementById("products-grid");
+    const page = pageFromUrl();
+    const total = Math.ceil(allProducts.length / PER_PAGE);
+    const start = (page - 1) * PER_PAGE;
+    const items = allProducts.slice(start, start + PER_PAGE);
+    if (!items.length) { grid.innerHTML = `<div class="empty">${t("noProducts")}</div>`; return; }
+    grid.innerHTML = items.map(p => `
+      <div class="product-card" onclick="location.href='item.html?type=product&id=${p.id}'">
+        <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
+        <div class="product-body">
+          <div class="product-cat">${escapeHtml(p.category || "")}</div>
+          <div class="product-name">${escapeHtml(p.name)}</div>
+          <div class="product-desc">${escapeHtml(p.description || "")}</div>
+          <div class="product-bottom">
+            <span class="product-price">${fmtPrice(p.price)}</span>
+            <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
+          </div>
+          <div class="product-actions">
+            <button class="btn btn-outline btn-sm" data-add-cart="${p.id}" ${p.in_stock ? "" : "disabled"}>${t("addToCart")}</button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=product&id=${p.id}'">${t("details")}</button>
+          </div>
+        </div>
+      </div>
+    `).join("");
+    grid.querySelectorAll("[data-add-cart]").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        addToCart(Number(btn.dataset.addCart), 1);
+        const p = allProducts.find(x => x.id === Number(btn.dataset.addCart));
+        const old = btn.textContent;
+        btn.textContent = "✓ " + t("addedToCart");
+        setTimeout(() => { btn.textContent = old; }, 1200);
+      });
+    });
+    renderPagination(document.getElementById("pagination"), Math.min(page, total), total, p => {
+      const url = new URL(location.href);
+      url.searchParams.set("page", p);
+      location.href = url.toString();
+    });
+  }
+
   async function loadProducts() {
     const grid = document.getElementById("products-grid");
     grid.innerHTML = `<div class="loading">${t("loading")}</div>`;
     try {
-      const data = await apiFetch("/api/products");
-      if (!data.length) { grid.innerHTML = `<div class="empty">${t("noProducts")}</div>`; return; }
-      grid.innerHTML = data.map(p => `
-        <div class="product-card" onclick="location.href='item.html?type=product&id=${p.id}'">
-          <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
-          <div class="product-body">
-            <div class="product-cat">${escapeHtml(p.category || "")}</div>
-            <div class="product-name">${escapeHtml(p.name)}</div>
-            <div class="product-desc">${escapeHtml(p.description || "")}</div>
-            <div class="product-bottom">
-              <span class="product-price">${fmtPrice(p.price)}</span>
-              <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=product&id=${p.id}'">${t("details")}</button>
-          </div>
-        </div>
-      `).join("");
+      allProducts = await apiFetch("/api/products");
+      renderProducts();
     } catch (err) {
       grid.innerHTML = `<div class="empty">${err.message}</div>`;
     }

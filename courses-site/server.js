@@ -295,6 +295,55 @@ app.post("/api/logout", (req, res) => {
   req.session.destroy(() => res.json({ success: true }));
 });
 
+// Восстановление пароля: шаг 1 — запрос SMS-кода на привязанный телефон
+app.post("/api/reset/send", async (req, res) => {
+  const { phone } = req.body || {};
+  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  if (!phoneDigits) return res.status(400).json({ error: "Заполните все поля" });
+  try {
+    const [rows] = await pool.query("SELECT id FROM users WHERE phone = ?", [phoneDigits]);
+    if (!rows.length) return res.status(404).json({ error: "Пользователь не найден" });
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const expiresAtMs = Date.now() + 5 * 60 * 1000;
+    await pool.query("DELETE FROM sms_codes WHERE expires_at_ms < ?", [Date.now()]);
+    await pool.query("DELETE FROM sms_codes WHERE session_id = ?", [req.session.id]);
+    // course_id хранит id пользователя, method='reset' отделяет коды восстановления от оплат
+    await pool.query(
+      "INSERT INTO sms_codes (session_id, code, course_id, price, method, card_last4, expires_at_ms) VALUES (?, ?, ?, 0, 'reset', NULL, ?)",
+      [req.session.id, code, rows[0].id, expiresAtMs]
+    );
+    res.json({ demoCode: code });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Восстановление пароля: шаг 2 — проверка кода и установка нового пароля
+app.post("/api/reset/confirm", async (req, res) => {
+  const { phone, code, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
+  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  try {
+    const [users] = await pool.query("SELECT id FROM users WHERE phone = ?", [phoneDigits]);
+    if (!users.length) return res.status(404).json({ error: "Пользователь не найден" });
+    const [codes] = await pool.query(
+      "SELECT * FROM sms_codes WHERE session_id = ? AND method = 'reset' AND course_id = ?",
+      [req.session.id, users[0].id]
+    );
+    const entry = codes[0];
+    if (!entry) return res.status(400).json({ error: "Сначала запросите SMS-код" });
+    if (Date.now() > Number(entry.expires_at_ms)) {
+      await pool.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
+      return res.status(400).json({ error: "Код истёк. Запросите новый." });
+    }
+    if (String(entry.code) !== String(code || "").replace(/\D/g, "")) {
+      return res.status(400).json({ error: "Неверный SMS-код" });
+    }
+    const hash = await bcrypt.hash(newPassword, 10);
+    await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, users[0].id]);
+    await pool.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/categories", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM categories ORDER BY name");
@@ -333,6 +382,8 @@ app.get("/api/courses/:id", async (req, res) => {
     );
     if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
     const course = courses[0];
+    await pool.query("UPDATE courses SET views = views + 1 WHERE id = ?", [course.id]);
+    course.views = Number(course.views || 0) + 1;
     const [lessons] = await pool.query(
       "SELECT id, title, content, duration_min, position, video_url, image_url, quiz FROM lessons WHERE course_id = ? ORDER BY position, id",
       [course.id]
@@ -418,6 +469,40 @@ app.get("/api/products", async (_req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Оформление заказа из корзины
+app.post("/api/orders", requireAuth, async (req, res) => {
+  const { name, phone, address, comment, items } = req.body || {};
+  const userName = String(name || "").trim() || (req.session.user && req.session.user.name) || "";
+  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  if (!userName || !phoneDigits) return res.status(400).json({ error: "Заполните имя и телефон" });
+  const cart = Array.isArray(items) ? items.filter(i => i && i.id && Number(i.qty) > 0) : [];
+  if (!cart.length) return res.status(400).json({ error: "Корзина пуста" });
+  try {
+    const ids = cart.map(i => Number(i.id));
+    const [rows] = await pool.query(
+      `SELECT id, name, price, in_stock FROM products WHERE id IN (${ids.map(() => "?").join(",")})`,
+      ids
+    );
+    const byId = new Map(rows.map(r => [r.id, r]));
+    let total = 0;
+    const lines = [];
+    for (const i of cart) {
+      const p = byId.get(Number(i.id));
+      if (!p) return res.status(400).json({ error: "Товар не найден" });
+      if (!p.in_stock) return res.status(400).json({ error: `Товар «${p.name}» закончился` });
+      const qty = Math.min(Math.max(1, Math.floor(Number(i.qty))), 99);
+      const sum = Number(p.price) * qty;
+      total += sum;
+      lines.push({ id: p.id, name: p.name, price: Number(p.price), qty, sum });
+    }
+    const [result] = await pool.query(
+      "INSERT INTO orders (user_id, name, phone, address, comment, total, items) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [req.session.user.id, userName, phoneDigits, String(address || "").trim(), String(comment || "").trim(), total, JSON.stringify(lines)]
+    );
+    res.json({ success: true, orderId: result.insertId, total });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get("/api/services", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM services ORDER BY name");
@@ -439,15 +524,16 @@ app.get("/api/site-reviews", async (_req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post("/api/consultations/request", async (req, res) => {
+app.post("/api/consultations/request", requireAuth, async (req, res) => {
   const { name, phone, consultationId } = req.body || {};
-  if (!name || !phone) return res.status(400).json({ error: "Заполните имя и телефон" });
+  const userName = String(name || "").trim() || (req.session.user && req.session.user.name) || "";
+  if (!userName || !phone) return res.status(400).json({ error: "Заполните имя и телефон" });
   try {
     const [rows] = await pool.query("SELECT title FROM consultations WHERE id = ?", [consultationId || 0]);
     const subject = rows.length ? rows[0].title : "Консультация";
     await pool.query(
       "INSERT INTO consultation_requests (name, phone, subject) VALUES (?, ?, ?)",
-      [String(name).trim(), String(phone).replace(/\D/g, ""), subject]
+      [userName, String(phone).replace(/\D/g, ""), subject]
     );
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -612,6 +698,22 @@ app.delete("/api/admin/payments/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM payments WHERE id = ?", [req.params.id]);
     res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Мои платежи (история оплат пользователя)
+app.get("/api/my/payments", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at,
+         c.title AS course_title
+       FROM payments p
+       JOIN courses c ON p.course_id = c.id
+       WHERE p.user_id = ?
+       ORDER BY p.created_at DESC`,
+      [req.session.user.id]
+    );
+    res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

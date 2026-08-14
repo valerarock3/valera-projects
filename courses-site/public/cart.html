@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Корзина</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container">
+    <h1 class="page-title" data-i18n="cart">Корзина</h1>
+    <div id="cart-root"><div class="loading" data-i18n="loading">Загрузка...</div></div>
+  </div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+  async function load() {
+    const root = document.getElementById("cart-root");
+    const cart = getCart();
+    if (!cart.length) {
+      root.innerHTML = `<div class="empty cart-empty-block">${t("cartEmpty")}<br><a href="products.html" style="color:var(--accent)">${t("toProducts")}</a></div>`;
+      return;
+    }
+    let products;
+    try { products = await apiFetch("/api/products"); }
+    catch (err) { root.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`; return; }
+    const byId = new Map(products.map(p => [p.id, p]));
+    const lines = cart.map(i => {
+      const p = byId.get(Number(i.id));
+      return p ? { id: p.id, name: p.name, price: Number(p.price), image: p.image_url, qty: Number(i.qty), stock: p.in_stock } : null;
+    }).filter(Boolean);
+
+    const me = await fetchMe();
+
+    function render() {
+      const cur = lines;
+      const sum = cur.reduce((s, l) => s + l.price * l.qty, 0);
+      root.innerHTML = `
+        <div class="card" style="padding:20px">
+          ${cur.map(l => `
+            <div class="cart-line">
+              <img src="${escapeHtml(l.image || "/uploads/product-default.svg")}" alt="">
+              <div class="cart-line-info">
+                <div class="cart-line-name">${escapeHtml(l.name)}</div>
+                <div class="cart-line-price">${fmtPrice(l.price)} × ${l.qty} = ${fmtPrice(l.price * l.qty)}</div>
+                <div class="cart-qty">
+                  <button data-dec="${l.id}">−</button>
+                  <span>${l.qty}</span>
+                  <button data-inc="${l.id}">+</button>
+                </div>
+              </div>
+              <button class="cart-remove" data-remove="${l.id}">✕</button>
+            </div>`).join("")}
+          <div class="cart-total"><span>${t("totalWord")}:</span><span>${fmtPrice(sum)}</span></div>
+        </div>
+        <div class="card" style="padding:20px;margin-top:16px">
+          ${me ? "" : `<div class="empty" style="padding:10px 0">${t("loginToCart")} <a href="login.html?next=cart.html" style="color:var(--accent)">${t("login")}</a></div>`}
+          <div class="form-error" id="order-error"></div>
+          <div class="form-group">
+            <label>${t("name")}</label>
+            <input id="order-name" value="${escapeHtml(me ? me.name : "")}" placeholder="${escapeHtml(t("enterName"))}">
+          </div>
+          <div class="form-group">
+            <label>${t("phone")}</label>
+            <input id="order-phone" value="${me && me.phone ? escapeHtml(me.phone) : ""}" placeholder="${escapeHtml(t("phonePh"))}">
+          </div>
+          <div class="form-group">
+            <label>${t("orderAddress")}</label>
+            <input id="order-address" placeholder="${escapeHtml(t("orderAddressPh"))}">
+          </div>
+          <div class="form-group">
+            <label>${t("orderComment")}</label>
+            <textarea id="order-comment" rows="3"></textarea>
+          </div>
+          <button class="btn btn-primary cart-submit" id="order-btn" ${me ? "" : "disabled"}>${t("cartOrder")}</button>
+        </div>`;
+      root.querySelectorAll("[data-inc]").forEach(b => b.addEventListener("click", () => { setCartQty(Number(b.dataset.inc), (lines.find(l => l.id === Number(b.dataset.inc)).qty || 0) + 1); load(); }));
+      root.querySelectorAll("[data-dec]").forEach(b => b.addEventListener("click", () => { setCartQty(Number(b.dataset.dec), (lines.find(l => l.id === Number(b.dataset.dec)).qty || 0) - 1); load(); }));
+      root.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => { removeFromCart(Number(b.dataset.remove)); load(); }));
+      const btn = document.getElementById("order-btn");
+      if (btn) btn.addEventListener("click", submitOrder);
+    }
+    render();
+
+    async function submitOrder() {
+      const btn = document.getElementById("order-btn");
+      const err = document.getElementById("order-error");
+      err.classList.remove("show");
+      btn.disabled = true;
+      const body = {
+        name: document.getElementById("order-name").value.trim(),
+        phone: document.getElementById("order-phone").value.trim(),
+        address: document.getElementById("order-address").value.trim(),
+        comment: document.getElementById("order-comment").value.trim(),
+        items: lines,
+      };
+      try {
+        const data = await apiFetch("/api/orders", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        localStorage.removeItem("cart");
+        renderCartBadge();
+        root.innerHTML = `<div class="card" style="padding:30px;text-align:center">
+          <div style="font-size:40px">✅</div>
+          <h2>${escapeHtml(t("orderSuccess"))}</h2>
+          <p>№ ${data.orderId} · ${fmtPrice(data.total)}</p>
+          <a class="btn btn-primary" href="products.html">${t("toProducts")}</a>
+        </div>`;
+      } catch (e) {
+        err.textContent = e.message;
+        err.classList.add("show");
+        btn.disabled = false;
+      }
+    }
+  }
+
+  initTheme();
+  renderNav();
+  load();
+  </script>
+</body>
+</html>

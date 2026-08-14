@@ -74,12 +74,14 @@
     function ctaHtml(item) {
       if (type === "product") {
         if (!item.in_stock) return "";
-        return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("🛍 " + (item.name || ""))}">${t("orderShort")}</a>`;
+        return `
+          <button class="btn btn-primary" style="width:100%" id="cta-add-cart">${t("addToCart")}</button>
+          <a class="btn btn-outline" style="width:100%;margin-top:8px" href="cart.html">${t("goToCart")}</a>`;
       }
       if (type === "service") {
-        return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("💆 " + (item.name || ""))}">${t("bookService")}</a>`;
+        return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("💆 " + (item.name || ""))}" data-cta>${t("bookService")}</a>`;
       }
-      return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("📞 " + (item.title || ""))}">${t("bookConsultation")}</a>`;
+      return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("📞 " + (item.title || ""))}" data-cta>${t("bookConsultation")}</a>`;
     }
 
     function reviewsHtml(item) {
@@ -131,7 +133,11 @@
         const title = item.name || item.title || "";
         const cat = type === "product" ? item.category : (item.expert || "");
         container.innerHTML = `
-          <a class="back-link" href="${cfg.list}">← ${t(cfg.titleKey)}</a>
+          ${breadcrumbs([
+            { text: t("home"), href: "index.html" },
+            { text: t(cfg.titleKey), href: cfg.list },
+            { text: title },
+          ])}
           <div class="course-detail-grid mt-16">
             <div class="course-hero">
               ${galleryHtml(item)}
@@ -148,6 +154,20 @@
             </div>
           </div>`;
         wireReview();
+        const addBtn = document.getElementById("cta-add-cart");
+        if (addBtn) addBtn.addEventListener("click", () => {
+          addToCart(item.id, 1);
+          const old = addBtn.textContent;
+          addBtn.textContent = "✓ " + t("addedToCart");
+          setTimeout(() => { addBtn.textContent = old; }, 1200);
+        });
+        container.querySelectorAll("[data-cta]").forEach(a => {
+          a.addEventListener("click", (e) => {
+            if (me) return;
+            e.preventDefault();
+            location.href = "login.html?next=" + encodeURIComponent("item.html?type=" + type + "&id=" + id);
+          });
+        });
       } catch (err) {
         container.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
       }

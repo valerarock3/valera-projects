@@ -244,6 +244,29 @@ async function initSchema() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Заказы товаров из корзины
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NULL,
+        name VARCHAR(100) NOT NULL,
+        phone VARCHAR(30) NOT NULL DEFAULT '',
+        address VARCHAR(300) NOT NULL DEFAULT '',
+        comment TEXT,
+        total DECIMAL(10,2) NOT NULL DEFAULT 0,
+        items TEXT,
+        status VARCHAR(50) NOT NULL DEFAULT 'new',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Счётчик просмотров курса
+    const [courseCols2] = await conn.query("SHOW COLUMNS FROM courses");
+    if (!courseCols2.map(c => c.Field).includes("views")) {
+      await conn.query("ALTER TABLE courses ADD COLUMN views INT NOT NULL DEFAULT 0");
+    }
+
     // Детальные страницы разделов: галереи изображений и отзывы
     await conn.query(`
       CREATE TABLE IF NOT EXISTS item_images (
