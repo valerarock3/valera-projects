@@ -243,6 +243,46 @@ async function initSchema() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // Детальные страницы разделов: галереи изображений и отзывы
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS item_images (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_type ENUM('product','service','consultation') NOT NULL,
+        item_id INT NOT NULL,
+        url VARCHAR(500) NOT NULL,
+        position INT DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_item (item_type, item_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS item_reviews (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_type ENUM('product','service','consultation') NOT NULL,
+        item_id INT NOT NULL,
+        user_id INT NULL,
+        author VARCHAR(100) NOT NULL,
+        rating TINYINT NOT NULL DEFAULT 5,
+        comment TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_user_item (user_id, item_type, item_id),
+        KEY idx_item (item_type, item_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Специалисты и изображения для услуг и консультаций
+    for (const table of ["services", "consultations"]) {
+      const [cols] = await conn.query(`SHOW COLUMNS FROM ${table}`);
+      const names = cols.map(c => c.Field);
+      if (!names.includes("instructor_id")) {
+        await conn.query(`ALTER TABLE ${table} ADD COLUMN instructor_id INT NULL`);
+      }
+      if (!names.includes("image_url")) {
+        await conn.query(`ALTER TABLE ${table} ADD COLUMN image_url VARCHAR(500) NOT NULL DEFAULT ''`);
+      }
+    }
   } finally {
     conn.release();
   }

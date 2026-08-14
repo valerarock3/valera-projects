@@ -14,7 +14,10 @@
   </nav>
 
   <div class="container">
-    <h1 class="page-title" data-i18n="services">Услуги</h1>
+    <div class="page-hero">
+      <h1 data-i18n="services">Услуги</h1>
+      <p class="page-sub" data-i18n="servicesSub">Сеансы массажа от профессиональных мастеров с опытом работы</p>
+    </div>
     <div class="card-grid" id="services-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
   </div>
 
@@ -28,7 +31,7 @@
       const data = await apiFetch("/api/services");
       if (!data.length) { grid.innerHTML = `<div class="empty">${t("noServices")}</div>`; return; }
       grid.innerHTML = data.map(s => `
-        <div class="service-card">
+        <div class="service-card" onclick="location.href='item.html?type=service&id=${s.id}'">
           <span class="service-icon">${escapeHtml(s.icon || "💆")}</span>
           <span class="service-name">${escapeHtml(s.name)}</span>
           <span class="service-desc">${escapeHtml(s.description || "")}</span>
@@ -37,7 +40,7 @@
             <span class="price">${fmtPrice(s.price)}</span>
           </div>
           <div class="service-footer">
-            <button class="btn btn-primary btn-sm" onclick="alert('${t("order")}: ${escapeHtml(s.name).replace(/'/g, "\\'")}')">${t("order")}</button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=service&id=${s.id}'">${t("details")}</button>
           </div>
         </div>
       `).join("");

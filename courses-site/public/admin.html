@@ -22,6 +22,11 @@
         <button data-panel="media">🎞 <span data-i18n="mediaTitle">Медиа</span></button>
         <button data-panel="categories">🗂 <span data-i18n="categories">Категории</span></button>
         <button data-panel="instructors">👨‍🏫 <span data-i18n="instructors">Преподаватели</span></button>
+        <button data-panel="products">🛍 <span data-i18n="products">Товары</span></button>
+        <button data-panel="services">💆 <span data-i18n="services">Услуги</span></button>
+        <button data-panel="consultations">📞 <span data-i18n="consultation">Консультации</span></button>
+        <button data-panel="reviews">⭐ <span data-i18n="reviews">Отзывы</span></button>
+        <button data-panel="requests">📨 <span data-i18n="requests">Заявки</span></button>
         <button data-panel="payments">💳 <span data-i18n="payments">Оплаты</span></button>
         <button data-panel="users">👥 <span data-i18n="users">Пользователи</span></button>
       </div>
@@ -62,6 +67,8 @@
     async function loadPanel() {
       const ok = await checkAdmin();
       if (!ok) return;
+      editingSectionId = null;
+      expandedImagesId = null;
       const panel = document.getElementById("admin-panel");
       panel.innerHTML = `<div class="loading">${t("loading")}</div>`;
       if (currentPanel === "courses") {
@@ -83,6 +90,21 @@
       } else if (currentPanel === "instructors") {
         allInstructors = await apiFetch("/api/admin/instructors");
         renderInstructors(panel);
+      } else if (currentPanel === "products") {
+        allInstructors = await apiFetch("/api/admin/instructors");
+        await renderSection(panel, SECTION_PRODUCT);
+      } else if (currentPanel === "services") {
+        allInstructors = await apiFetch("/api/admin/instructors");
+        await renderSection(panel, SECTION_SERVICE);
+      } else if (currentPanel === "consultations") {
+        allInstructors = await apiFetch("/api/admin/instructors");
+        await renderSection(panel, SECTION_CONSULTATION);
+      } else if (currentPanel === "reviews") {
+        const reviews = await apiFetch("/api/admin/site-reviews");
+        renderSiteReviews(panel, reviews);
+      } else if (currentPanel === "requests") {
+        const requests = await apiFetch("/api/admin/requests");
+        renderRequests(panel, requests);
       } else if (currentPanel === "payments") {
         const payments = await apiFetch("/api/admin/payments");
         renderPayments(panel, payments);
@@ -917,6 +939,367 @@
         img.onerror = () => { preview.innerHTML = "🎬 " + url; };
         preview.appendChild(img);
       }
+    }
+
+    // ============ РАЗДЕЛЫ: ТОВАРЫ / УСЛУГИ / КОНСУЛЬТАЦИИ ============
+    const SECTION_PRODUCT = {
+      list: "products", type: "product", addTitle: "addProduct", editTitle: "editProduct", nameKey: "productName", titleCol: "name",
+      fields: [
+        { key: "category", label: "categoryField", type: "text" },
+        { key: "price", label: "price", type: "number" },
+        { key: "in_stock", label: "inStockLabel", type: "checkbox" },
+      ],
+      icon: false, instructor: false, expert: false,
+      sub: it => `${escapeHtml(it.category || "")} · ${fmtPrice(it.price)} · ${it.in_stock ? t("inStock") : t("outOfStock")}`,
+    };
+    const SECTION_SERVICE = {
+      list: "services", type: "service", addTitle: "addService", editTitle: "editService", nameKey: "serviceName", titleCol: "name",
+      fields: [
+        { key: "price", label: "price", type: "number" },
+        { key: "duration_min", label: "duration", type: "number" },
+        { key: "icon", label: "iconField", type: "icon" },
+      ],
+      icon: true, instructor: true, expert: false,
+      sub: it => `${it.icon || "💆"} ${it.duration_min} ${t("minUnit")} · ${fmtPrice(it.price)}${it.instructor_name ? " · " + escapeHtml(it.instructor_name) : ""}`,
+    };
+    const SECTION_CONSULTATION = {
+      list: "consultations", type: "consultation", addTitle: "addConsultation", editTitle: "editConsultation", nameKey: "consultationTitle", titleCol: "title",
+      fields: [
+        { key: "price", label: "price", type: "number" },
+        { key: "duration_min", label: "duration", type: "number" },
+      ],
+      icon: false, instructor: true, expert: true,
+      sub: it => `${it.expert ? escapeHtml(it.expert) : "—"} · ${it.duration_min} ${t("minUnit")} · ${fmtPrice(it.price)}`,
+    };
+
+    let editingSectionId = null;
+    let expandedImagesId = null;
+
+    async function renderSection(panel, cfg) {
+      const items = await apiFetch(`/api/admin/${cfg.list}`);
+      panel.innerHTML = `
+        <div class="panel-title">${t(cfg.list)} (${items.length})</div>
+        <div class="admin-form">
+          <h4 id="sec-form-title">${t(cfg.addTitle)}</h4>
+          <div class="form-group"><label>${t(cfg.nameKey)}</label><input id="sec-name"></div>
+          <div class="form-group"><label>${t("description")}</label><textarea id="sec-desc"></textarea></div>
+          ${cfg.fields.map(f => sectionFieldHtml(f)).join("")}
+          ${cfg.instructor ? `
+            <div class="form-group"><label>${t("specialistField")}</label>
+              <select id="sec-instr">
+                <option value="">${t("noInstructor")}</option>
+                ${allInstructors.map(i => `<option value="${i.id}">${escapeHtml(i.name)}</option>`).join("")}
+              </select>
+              ${allInstructors.length ? "" : `<div class="hint">${t("noInstructorHint")}</div>`}
+            </div>` : ""}
+          ${cfg.expert ? `<div class="form-group"><label>${t("expertName")}</label><input id="sec-expert" placeholder="${t("expertNameHint")}"></div>` : ""}
+          <div class="form-group"><label>${t("imageUrl")}</label><input id="sec-img" placeholder="https://..."></div>
+          <div class="drop-zone" id="dz-sec-img">
+            <div class="dz-text">🖼 ${t("dragImage")}</div>
+            <div class="dz-preview"></div>
+            <div class="dz-status"></div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="sec-save">${t("save")}</button>
+            <button class="btn btn-outline hidden" id="sec-cancel">✕ ${t("cancel")}</button>
+          </div>
+        </div>
+        ${items.length ? items.map(it => `
+          <div class="admin-row">
+            <div class="ar-main">
+              ${it.image_url ? `<img class="ar-thumb" src="${escapeHtml(it.image_url)}" onerror="this.style.display='none'">` : ""}
+              <div>
+                <div class="ar-title">${escapeHtml(it[cfg.titleCol])} ${cfg.type === "product" && it.in_stock === 0 ? `<span class="badge badge-out">${t("outOfStock")}</span>` : ""}</div>
+                <div class="ar-sub">${cfg.sub(it)}${it.images.length ? ` · ${it.images.length} ${t("imagesCount")}` : ""}</div>
+              </div>
+            </div>
+            <div class="ar-actions">
+              <button class="btn btn-outline btn-sm" data-secimg="${it.id}">🎞 ${t("galleryImages")}</button>
+              <button class="btn btn-outline btn-sm" data-secedit="${it.id}">✏ ${t("edit")}</button>
+              <button class="btn btn-danger btn-sm" data-secdel="${it.id}">${t("delete")}</button>
+            </div>
+          </div>
+          <div class="ig-manager hidden" id="igm-${it.id}"></div>`).join("") : `<div class="empty">—</div>`}
+      `;
+
+      if (cfg.instructor) {
+        const instrSel = panel.querySelector("#sec-instr");
+        instrSel.addEventListener("change", () => {
+          if (!cfg.expert) return;
+          const selected = allInstructors.find(i => String(i.id) === instrSel.value);
+          const expertEl = panel.querySelector("#sec-expert");
+          if (selected) expertEl.value = selected.name;
+        });
+      }
+      makeDropZone("dz-sec-img", "sec-img", "image/*");
+      if (cfg.icon) sectionEmojiPresets(panel);
+
+      panel.querySelector("#sec-save").addEventListener("click", () => sectionSave(panel, cfg));
+      panel.querySelector("#sec-cancel").addEventListener("click", () => { editingSectionId = null; renderSection(panel, cfg); });
+      panel.querySelectorAll("[data-secedit]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const it = items.find(x => String(x.id) === btn.dataset.secedit);
+          if (!it) return;
+          editingSectionId = it.id;
+          panel.querySelector("#sec-form-title").textContent = t(cfg.editTitle);
+          panel.querySelector("#sec-name").value = it[cfg.titleCol] || "";
+          panel.querySelector("#sec-desc").value = it.description || "";
+          cfg.fields.forEach(f => {
+            const el = panel.querySelector(`#sec-${f.key}`);
+            if (!el) return;
+            if (f.type === "checkbox") el.checked = !!it[f.key];
+            else el.value = it[f.key] != null ? it[f.key] : "";
+          });
+          if (cfg.instructor) panel.querySelector("#sec-instr").value = it.instructor_id || "";
+          if (cfg.expert) panel.querySelector("#sec-expert").value = it.expert || "";
+          panel.querySelector("#sec-img").value = it.image_url || "";
+          showDropPreview(panel.querySelector("#dz-sec-img .dz-preview"), it.image_url || "", "image/*");
+          panel.querySelector("#sec-cancel").classList.remove("hidden");
+          panel.querySelector(".admin-form").scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+      panel.querySelectorAll("[data-secdel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t(cfg.type === "product" ? "confirmDeleteProduct" : cfg.type === "service" ? "confirmDeleteService" : "confirmDeleteConsultation"))) return;
+          try {
+            await apiFetch(`/api/admin/${cfg.list}/${btn.dataset.secdel}`, { method: "DELETE" });
+            renderSection(panel, cfg);
+          } catch (err) { alert(err.message); }
+        });
+      });
+      panel.querySelectorAll("[data-secimg]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = Number(btn.dataset.secimg);
+          const manager = panel.querySelector(`#igm-${id}`);
+          if (!manager.classList.contains("hidden")) {
+            manager.classList.add("hidden");
+            manager.innerHTML = "";
+            if (expandedImagesId === id) expandedImagesId = null;
+            return;
+          }
+          expandedImagesId = id;
+          const it = items.find(x => x.id === id);
+          renderImagesManager(panel, cfg, manager, it);
+        });
+      });
+
+      if (expandedImagesId) {
+        const m = panel.querySelector(`#igm-${expandedImagesId}`);
+        const it = items.find(x => x.id === expandedImagesId);
+        if (m && it) renderImagesManager(panel, cfg, m, it);
+      }
+    }
+
+    function sectionFieldHtml(f) {
+      if (f.type === "checkbox") {
+        return `<div class="form-group"><label class="check-label"><input type="checkbox" id="sec-${f.key}"> ${t(f.label)}</label></div>`;
+      }
+      if (f.type === "icon") {
+        return `<div class="form-group"><label>${t(f.label)}</label>
+          <input id="sec-icon" maxlength="4">
+          <div class="emoji-presets">${"💆🦴🏋️🧘👶🌊💧🔥🩺💊".split("").map(e => `<button type="button" class="btn btn-outline" data-emoji="${e}">${e}</button>`).join("")}</div>
+        </div>`;
+      }
+      return `<div class="form-group"><label>${t(f.label)}</label><input type="${f.type === "number" ? "number" : "text"}" id="sec-${f.key}" min="0"></div>`;
+    }
+
+    function sectionEmojiPresets(panel) {
+      panel.querySelectorAll("[data-emoji]").forEach(b => {
+        b.addEventListener("click", () => { panel.querySelector("#sec-icon").value = b.dataset.emoji; });
+      });
+    }
+
+    async function sectionSave(panel, cfg) {
+      const payload = {
+        name: panel.querySelector("#sec-name").value.trim(),
+        title: panel.querySelector("#sec-name").value.trim(),
+        description: panel.querySelector("#sec-desc").value.trim(),
+        price: panel.querySelector("#sec-price").value || 0,
+        image_url: panel.querySelector("#sec-img").value.trim(),
+      };
+      if (panel.querySelector("#sec-category")) payload.category = panel.querySelector("#sec-category").value.trim();
+      if (panel.querySelector("#sec-in_stock")) payload.in_stock = panel.querySelector("#sec-in_stock").checked ? 1 : 0;
+      if (panel.querySelector("#sec-duration_min")) payload.duration_min = panel.querySelector("#sec-duration_min").value || 0;
+      if (panel.querySelector("#sec-icon")) payload.icon = panel.querySelector("#sec-icon").value.trim();
+      if (panel.querySelector("#sec-instr")) payload.instructor_id = panel.querySelector("#sec-instr").value ? Number(panel.querySelector("#sec-instr").value) : null;
+      if (panel.querySelector("#sec-expert")) payload.expert = panel.querySelector("#sec-expert").value.trim();
+      try {
+        if (editingSectionId) {
+          await apiFetch(`/api/admin/${cfg.list}/${editingSectionId}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+          });
+        } else {
+          await apiFetch(`/api/admin/${cfg.list}`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+          });
+        }
+        editingSectionId = null;
+        await renderSection(panel, cfg);
+      } catch (err) { alert(err.message); }
+    }
+
+    function renderImagesManager(panel, cfg, manager, item) {
+      manager.classList.remove("hidden");
+      manager.innerHTML = `
+        <div class="ig-grid">
+          ${item.images.map(im => `
+            <div class="ig-card">
+              <img src="${escapeHtml(im.url)}" onerror="this.closest('.ig-card').style.display='none'">
+              <button class="btn btn-danger" data-imgdel="${im.id}" title="${t("delete")}">✕</button>
+            </div>`).join("") || `<div class="empty">—</div>`}
+        </div>
+        <div class="ig-add">
+          <input id="igm-url" placeholder="https://...">
+          <button class="btn" data-imgadd>➕ ${t("addImage")}</button>
+          <div class="drop-zone ig-drop" id="igm-drop">
+            <div class="dz-text">🖼 ${t("imagesHint")}</div>
+            <div class="dz-status"></div>
+          </div>
+        </div>`;
+      const refresh = async () => { expandedImagesId = item.id; await renderSection(panel, cfg); };
+      const addImage = async (url) => {
+        if (!url) return;
+        try {
+          await apiFetch(`/api/admin/${cfg.list}/${item.id}/images`, {
+            method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url }),
+          });
+          refresh();
+        } catch (err) { alert(err.message); }
+      };
+      manager.querySelector("[data-imgadd]").addEventListener("click", () => addImage(manager.querySelector("#igm-url").value.trim()));
+      manager.querySelectorAll("[data-imgdel]").forEach(b => {
+        b.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeleteImage"))) return;
+          try {
+            await apiFetch(`/api/admin/item-images/${b.dataset.imgdel}`, { method: "DELETE" });
+            refresh();
+          } catch (err) { alert(err.message); }
+        });
+      });
+      galleryDropZone("igm-drop", addImage);
+    }
+
+    function galleryDropZone(zoneId, onUrl) {
+      const zone = document.getElementById(zoneId);
+      if (!zone) return;
+      const fi = document.createElement("input");
+      fi.type = "file";
+      fi.hidden = true;
+      fi.accept = "image/*";
+      zone.appendChild(fi);
+      const status = zone.querySelector(".dz-status");
+      zone.addEventListener("click", () => fi.click());
+      zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("drag"); });
+      zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+      zone.addEventListener("drop", e => {
+        e.preventDefault();
+        zone.classList.remove("drag");
+        if (e.dataTransfer.files.length) up(e.dataTransfer.files[0]);
+      });
+      fi.addEventListener("change", () => {
+        if (fi.files.length) up(fi.files[0]);
+        fi.value = "";
+      });
+      async function up(file) {
+        if (!file.type.startsWith("image/")) {
+          status.textContent = t("uploadBadType");
+          status.className = "dz-status bad";
+          return;
+        }
+        status.textContent = t("uploading") + " " + file.name;
+        status.className = "dz-status";
+        try {
+          const fd = new FormData();
+          fd.append("file", file);
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          const data = await res.json();
+          if (!res.ok) throw new Error(translateError(data.error) || "Error");
+          status.textContent = "✔ " + t("uploaded");
+          status.className = "dz-status ok";
+          onUrl(data.url);
+        } catch (err) {
+          status.textContent = err.message;
+          status.className = "dz-status bad";
+        }
+      }
+    }
+
+    // ============ ОТЗЫВЫ САЙТА ============
+    function renderSiteReviews(panel, reviews) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("reviews")} (${reviews.length})</div>
+        <div class="admin-form">
+          <h4>${t("addReview")}</h4>
+          <div class="form-group"><label>${t("reviewAuthor")}</label><input id="rv-author"></div>
+          <div class="form-group"><label>${t("reviewRole")}</label><input id="rv-role"></div>
+          <div class="form-group"><label>${t("reviewRating")}</label><input type="number" id="rv-rating" min="1" max="5" value="5"></div>
+          <div class="form-group"><label>${t("reviewText")}</label><textarea id="rv-text"></textarea></div>
+          <div class="form-actions"><button class="btn btn-primary" id="rv-save">${t("save")}</button></div>
+        </div>
+        ${reviews.length ? reviews.map(r => `
+          <div class="admin-row">
+            <div class="ar-main">
+              <div>
+                <div class="ar-title">${escapeHtml(r.author)} <span class="stars">${"★".repeat(Math.max(0, Math.min(5, r.rating || 5)))}${"☆".repeat(5 - Math.max(0, Math.min(5, r.rating || 5)))}</span></div>
+                <div class="ar-sub">${escapeHtml(r.role || "")}</div>
+                <div class="ar-text">${escapeHtml(r.text)}</div>
+              </div>
+            </div>
+            <div class="ar-actions"><button class="btn btn-danger btn-sm" data-rvdel="${r.id}">${t("delete")}</button></div>
+          </div>`).join("") : `<div class="empty">—</div>`}
+      `;
+      panel.querySelector("#rv-save").addEventListener("click", async () => {
+        const author = panel.querySelector("#rv-author").value.trim();
+        const text = panel.querySelector("#rv-text").value.trim();
+        if (!author || !text) { alert(t("fillReview")); return; }
+        try {
+          await apiFetch("/api/admin/site-reviews", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              author,
+              role: panel.querySelector("#rv-role").value.trim(),
+              rating: Number(panel.querySelector("#rv-rating").value) || 5,
+              text,
+            }),
+          });
+          loadPanel();
+        } catch (err) { alert(err.message); }
+      });
+      panel.querySelectorAll("[data-rvdel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeleteReview"))) return;
+          try {
+            await apiFetch(`/api/admin/site-reviews/${btn.dataset.rvdel}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
+    }
+
+    // ============ ЗАЯВКИ ============
+    function renderRequests(panel, requests) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("requests")} (${requests.length})</div>
+        ${requests.length ? requests.map(r => `
+          <div class="admin-row">
+            <div class="ar-main">
+              <div>
+                <div class="ar-title">${escapeHtml(r.name || "—")} · <a href="tel:${escapeHtml(r.phone || "")}">${escapeHtml(r.phone || "")}</a></div>
+                <div class="ar-sub">${escapeHtml(r.subject || "")} · ${new Date(r.created_at).toLocaleString()}</div>
+              </div>
+            </div>
+            <div class="ar-actions"><button class="btn btn-danger btn-sm" data-reqdel="${r.id}">${t("delete")}</button></div>
+          </div>`).join("") : `<div class="empty">${t("requestsEmpty")}</div>`}
+      `;
+      panel.querySelectorAll("[data-reqdel]").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm(t("confirmDeleteRequest"))) return;
+          try {
+            await apiFetch(`/api/admin/requests/${btn.dataset.reqdel}`, { method: "DELETE" });
+            loadPanel();
+          } catch (err) { alert(err.message); }
+        });
+      });
     }
 
     initTheme();

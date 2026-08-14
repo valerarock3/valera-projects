@@ -1,10 +1,7 @@
 # Папки зависимостей
 node_modules/
 
-# Загруженные пользователями файлы (медиа курсов)
-courses-site/data/uploads/
-
-# Данные и временные файлы MySQL
+# Данные и временные файлы MySQL (дамп БД хранится в courses-site/database.sql)
 mysql-data/
 mysql-data8/
 phpmyadmin/tmp/

@@ -15,15 +15,18 @@
 
   <div class="container">
     <div class="hero">
+      <span class="hero-badge">💆 <span data-i18n="heroBadge">Академия профессионального массажа</span></span>
       <h1 data-i18n="welcome">Добро пожаловать на платформу</h1>
       <p data-i18n="welcomeSub">Обучение массажу и уходу за телом: курсы, товары, услуги и консультации специалистов</p>
-      <div class="hero-buttons">
-        <a href="catalog.html" class="btn btn-primary" data-i18n="heroCta">Выбрать курс</a>
-        <a href="consultation.html" class="btn btn-outline" data-i18n="heroCta2">Записаться на консультацию</a>
-      </div>
     </div>
 
     <div class="section-grid">
+      <a href="catalog.html" class="section-btn">
+        <span class="sb-icon">📚</span>
+        <span class="sb-title" data-i18n="sectionCourses">Курсы обучения</span>
+        <span class="sb-sub">Обучение массажу с нуля до профессионального уровня</span>
+        <span class="sb-arrow">→</span>
+      </a>
       <a href="products.html" class="section-btn">
         <span class="sb-icon">🛍️</span>
         <span class="sb-title" data-i18n="products">Товары</span>
@@ -42,128 +45,21 @@
         <span class="sb-sub">Индивидуальные консультации специалистов</span>
         <span class="sb-arrow">→</span>
       </a>
-      <a href="catalog.html" class="section-btn">
-        <span class="sb-icon">📚</span>
-        <span class="sb-title" data-i18n="sectionCourses">Курсы обучения</span>
-        <span class="sb-sub">Обучение массажу с нуля до профессионального уровня</span>
-        <span class="sb-arrow">→</span>
-      </a>
-      <a href="reviews.html" class="section-btn">
-        <span class="sb-icon">⭐</span>
-        <span class="sb-title" data-i18n="reviews">Отзывы</span>
-        <span class="sb-sub">Что говорят клиенты и выпускники</span>
-        <span class="sb-arrow">→</span>
-      </a>
     </div>
 
-    <div class="section" id="courses-preview">
-      <div class="section-head">
-        <h2 class="section-title" data-i18n="sectionCourses">Курсы обучения</h2>
-        <a href="catalog.html" class="section-link" data-i18n="viewAll">Смотреть все</a>
+    <div class="section about-section">
+      <div class="about-card">
+        <img src="uploads/svetlana.svg" alt="Светлана">
+        <div class="about-info">
+          <span class="about-role" data-i18n="aboutRole">Руководитель проекта</span>
+          <h2 class="about-name" data-i18n="aboutName">Светлана</h2>
+          <p class="about-text" data-i18n="aboutText">Светлана — руководитель проекта «Курсы массажа». Сертифицированный специалист с более чем 10-летним стажем в массаже и преподавательской практике. Она лично контролирует качество учебных материалов, отбирает преподавателей и следит, чтобы каждый курс был понятным, полезным и практичным. Под руководством Светланы платформа выпустила более 500 специалистов.</p>
+        </div>
       </div>
-      <div class="courses-grid" id="courses-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
-    </div>
-
-    <div class="section" id="products-preview">
-      <div class="section-head">
-        <h2 class="section-title" data-i18n="sectionProducts">Наши товары</h2>
-        <a href="products.html" class="section-link" data-i18n="viewAll">Смотреть все</a>
-      </div>
-      <div class="card-grid" id="products-grid"></div>
-    </div>
-
-    <div class="section" id="services-preview">
-      <div class="section-head">
-        <h2 class="section-title" data-i18n="sectionServices">Наши услуги</h2>
-        <a href="services.html" class="section-link" data-i18n="viewAll">Смотреть все</a>
-      </div>
-      <div class="card-grid" id="services-grid"></div>
-    </div>
-
-    <div class="section" id="reviews-preview">
-      <div class="section-head">
-        <h2 class="section-title" data-i18n="sectionReviews">Отзывы клиентов</h2>
-        <a href="reviews.html" class="section-link" data-i18n="viewAll">Смотреть все</a>
-      </div>
-      <div class="card-grid" id="reviews-grid"></div>
     </div>
   </div>
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
-  <script>
-  async function loadHome() {
-    try {
-      const [courses, products, services, reviews] = await Promise.all([
-        apiFetch("/api/courses").catch(() => []),
-        apiFetch("/api/products").catch(() => []),
-        apiFetch("/api/services").catch(() => []),
-        apiFetch("/api/site-reviews").catch(() => [])
-      ]);
-
-      const coursesGrid = document.getElementById("courses-grid");
-      coursesGrid.innerHTML = courses.length
-        ? courses.slice(0, 3).map(c => `
-            <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
-              <img src="${courseCover(c)}" alt="">
-              <div class="course-body">
-                <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
-                <div class="course-title">${escapeHtml(c.title)}</div>
-                <div class="course-desc">${escapeHtml((c.description || "").slice(0, 90))}</div>
-                <div class="course-meta">
-                  <span class="course-price">${fmtPrice(c.price)}</span>
-                  <span class="course-info">${c.lessons_count || 0} ${pluralLessons(c.lessons_count || 0)}</span>
-                </div>
-              </div>
-            </div>`).join("")
-        : `<div class="empty">${t("notFound")}</div>`;
-
-      const productsGrid = document.getElementById("products-grid");
-      productsGrid.innerHTML = products.length
-        ? products.slice(0, 3).map(p => `
-            <div class="product-card">
-              <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
-              <div class="product-body">
-                <div class="product-cat">${escapeHtml(p.category || "")}</div>
-                <div class="product-name">${escapeHtml(p.name)}</div>
-                <div class="product-desc">${escapeHtml((p.description || "").slice(0, 90))}</div>
-                <div class="product-bottom">
-                  <span class="product-price">${fmtPrice(p.price)}</span>
-                  <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
-                </div>
-              </div>
-            </div>`).join("")
-        : `<div class="empty">${t("noProducts")}</div>`;
-
-      const servicesGrid = document.getElementById("services-grid");
-      servicesGrid.innerHTML = services.length
-        ? services.slice(0, 3).map(s => `
-            <div class="service-card">
-              <span class="service-icon">${escapeHtml(s.icon || "💆")}</span>
-              <span class="service-name">${escapeHtml(s.name)}</span>
-              <span class="service-desc">${escapeHtml((s.description || "").slice(0, 90))}</span>
-              <div class="service-meta">
-                <span>⏱ ${s.duration_min || 0} ${t("minLabel")}</span>
-                <span class="price">${fmtPrice(s.price)}</span>
-              </div>
-            </div>`).join("")
-        : `<div class="empty">${t("noServices")}</div>`;
-
-      const reviewsGrid = document.getElementById("reviews-grid");
-      reviewsGrid.innerHTML = reviews.length
-        ? reviews.slice(0, 3).map(r => `
-            <div class="review-card">
-              <div class="stars">${"★".repeat(Math.min(5, r.rating))}${"☆".repeat(Math.max(0, 5 - Math.min(5, r.rating)))}</div>
-              <div class="review-author">${escapeHtml(r.author)}</div>
-              <div class="review-role">${escapeHtml(r.role || "")}</div>
-              <div class="review-text">${escapeHtml(r.text || "")}</div>
-            </div>`).join("")
-        : `<div class="empty">${t("noSiteReviews")}</div>`;
-    } catch (err) {
-      console.error(err);
-    }
-  }
-  loadHome();
-  </script>
 </body>
 </html>

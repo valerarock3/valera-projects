@@ -453,6 +453,63 @@ app.post("/api/consultations/request", async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Детальные страницы разделов: товары, услуги, консультации
+const ITEM_TYPES = { product: "products", service: "services", consultation: "consultations" };
+
+app.get("/api/items/:type/:id", async (req, res) => {
+  const table = ITEM_TYPES[req.params.type];
+  if (!table) return res.status(400).json({ error: "Неверный тип записи" });
+  try {
+    const [rows] = await pool.query(`SELECT * FROM ${table} WHERE id = ?`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+    const item = rows[0];
+    const [images] = await pool.query(
+      "SELECT url FROM item_images WHERE item_type = ? AND item_id = ? ORDER BY position, id",
+      [req.params.type, item.id]
+    );
+    const [reviews] = await pool.query(
+      "SELECT id, author, rating, comment, created_at FROM item_reviews WHERE item_type = ? AND item_id = ? ORDER BY created_at DESC",
+      [req.params.type, item.id]
+    );
+    const avg = reviews.length
+      ? (reviews.reduce((s, r) => s + Number(r.rating), 0) / reviews.length).toFixed(1)
+      : null;
+    let instructor_info = null;
+    if (item.instructor_id) {
+      const [inst] = await pool.query(
+        "SELECT id, name, specialty, bio, experience, avatar, socials FROM instructors WHERE id = ?",
+        [item.instructor_id]
+      );
+      if (inst.length) {
+        instructor_info = { ...inst[0], socials: parseSocials(inst[0].socials) };
+      }
+    }
+    item.images = images.length ? images.map(i => i.url) : (item.image_url ? [item.image_url] : []);
+    res.json({ ...item, reviews, avg_rating: avg, instructor_info, item_type: req.params.type });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/items/:type/:id/review", requireAuth, async (req, res) => {
+  const table = ITEM_TYPES[req.params.type];
+  if (!table) return res.status(400).json({ error: "Неверный тип записи" });
+  const { rating, comment } = req.body || {};
+  const commentText = String(comment || "").trim();
+  if (!commentText) return res.status(400).json({ error: "Заполните отзыв" });
+  const r = Math.min(5, Math.max(1, parseInt(rating, 10) || 5));
+  try {
+    const [rows] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+    await pool.query(
+      "INSERT INTO item_reviews (item_type, item_id, user_id, author, rating, comment) VALUES (?, ?, ?, ?, ?, ?)",
+      [req.params.type, req.params.id, req.session.user.id, req.session.user.name, r, commentText]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === "ER_DUP_ENTRY") return res.status(400).json({ error: "Отзыв уже оставлен" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/courses/:id/enroll", requireAuth, async (req, res) => {
   try {
     const [courses] = await pool.query("SELECT price FROM courses WHERE id = ?", [req.params.id]);
@@ -862,6 +919,175 @@ app.delete("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ============ АДМИН: ТОВАРЫ / УСЛУГИ / КОНСУЛЬТАЦИИ ============
+function registerItemAdmin(type, table) {
+  const nameCol = type === "consultation" ? "title" : "name";
+  const joinSql = type === "product"
+    ? ""
+    : " LEFT JOIN instructors i ON i.id = t.instructor_id";
+
+  app.get(`/api/admin/${type}s`, requireAdmin, async (_req, res) => {
+    try {
+      const [rows] = await pool.query(
+        `SELECT t.*${joinSql ? ", i.name AS instructor_name" : ""},
+           (SELECT COUNT(*) FROM item_images im WHERE im.item_type = ? AND im.item_id = t.id) AS images_count,
+           (SELECT GROUP_CONCAT(CONCAT_WS('|', im.id, im.url) SEPARATOR ';;') FROM item_images im WHERE im.item_type = ? AND im.item_id = t.id ORDER BY im.position, im.id) AS images_str
+         FROM ${table} t${joinSql} ORDER BY t.id DESC`,
+        [type, type]
+      );
+      for (const row of rows) row.images = parseItemImages(row.images_str);
+      res.json(rows);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post(`/api/admin/${type}s`, requireAdmin, async (req, res) => {
+    const { name, title, description, price, category, in_stock, image_url, duration_min, icon, instructor_id, expert } = req.body || {};
+    const value = String(name || title || "").trim();
+    if (!value) return res.status(400).json({ error: "Укажите название" });
+    const insId = instructor_id ? Number(instructor_id) : null;
+    try {
+      let result;
+      if (type === "product") {
+        [result] = await pool.query(
+          "INSERT INTO products (name, description, price, category, in_stock, image_url) VALUES (?, ?, ?, ?, ?, ?)",
+          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || ""]
+        );
+      } else if (type === "service") {
+        [result] = await pool.query(
+          "INSERT INTO services (name, description, price, duration_min, icon, image_url, instructor_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [value, description || "", Number(price) || 0, Number(duration_min) || 0, icon || "💆", image_url || "", insId]
+        );
+      } else {
+        [result] = await pool.query(
+          "INSERT INTO consultations (title, description, price, duration_min, expert, image_url, instructor_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [value, description || "", Number(price) || 0, Number(duration_min) || 0, expert || "", image_url || "", insId]
+        );
+      }
+      res.json({ success: true, id: result.insertId });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.put(`/api/admin/${type}s/:id`, requireAdmin, async (req, res) => {
+    const { name, title, description, price, category, in_stock, image_url, duration_min, icon, instructor_id, expert } = req.body || {};
+    const value = String(name || title || "").trim();
+    if (!value) return res.status(400).json({ error: "Укажите название" });
+    const insId = instructor_id ? Number(instructor_id) : null;
+    try {
+      const [rows] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [req.params.id]);
+      if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+      if (type === "product") {
+        await pool.query(
+          "UPDATE products SET name = ?, description = ?, price = ?, category = ?, in_stock = ?, image_url = ? WHERE id = ?",
+          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || "", req.params.id]
+        );
+      } else if (type === "service") {
+        await pool.query(
+          "UPDATE services SET name = ?, description = ?, price = ?, duration_min = ?, icon = ?, image_url = ?, instructor_id = ? WHERE id = ?",
+          [value, description || "", Number(price) || 0, Number(duration_min) || 0, icon || "💆", image_url || "", insId, req.params.id]
+        );
+      } else {
+        await pool.query(
+          "UPDATE consultations SET title = ?, description = ?, price = ?, duration_min = ?, expert = ?, image_url = ?, instructor_id = ? WHERE id = ?",
+          [value, description || "", Number(price) || 0, Number(duration_min) || 0, expert || "", image_url || "", insId, req.params.id]
+        );
+      }
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.delete(`/api/admin/${type}s/:id`, requireAdmin, async (req, res) => {
+    try {
+      const [rows] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [req.params.id]);
+      if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+      await pool.query("DELETE FROM item_images WHERE item_type = ? AND item_id = ?", [type, req.params.id]);
+      await pool.query("DELETE FROM item_reviews WHERE item_type = ? AND item_id = ?", [type, req.params.id]);
+      await pool.query(`DELETE FROM ${table} WHERE id = ?`, [req.params.id]);
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+
+  app.post(`/api/admin/${type}s/:id/images`, requireAdmin, async (req, res) => {
+    const { url } = req.body || {};
+    if (!url || !String(url).trim()) return res.status(400).json({ error: "Укажите ссылку на изображение" });
+    try {
+      const [rows] = await pool.query(`SELECT id FROM ${table} WHERE id = ?`, [req.params.id]);
+      if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+      const [mx] = await pool.query(
+        "SELECT COALESCE(MAX(position), -1) AS m FROM item_images WHERE item_type = ? AND item_id = ?",
+        [type, req.params.id]
+      );
+      await pool.query(
+        "INSERT INTO item_images (item_type, item_id, url, position) VALUES (?, ?, ?, ?)",
+        [type, req.params.id, String(url).trim(), Number(mx[0].m) + 1]
+      );
+      res.json({ success: true });
+    } catch (err) { res.status(500).json({ error: err.message }); }
+  });
+}
+
+function parseItemImages(str) {
+  if (!str) return [];
+  return String(str).split(";;").map((part) => {
+    const idx = part.indexOf("|");
+    if (idx < 0) return null;
+    return { id: Number(part.slice(0, idx)), url: part.slice(idx + 1) };
+  }).filter(Boolean);
+}
+
+app.delete("/api/admin/item-images/:id", requireAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM item_images WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+registerItemAdmin("product", "products");
+registerItemAdmin("service", "services");
+registerItemAdmin("consultation", "consultations");
+
+// ============ АДМИН: ОТЗЫВЫ САЙТА ============
+app.get("/api/admin/site-reviews", requireAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM site_reviews ORDER BY id DESC");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post("/api/admin/site-reviews", requireAdmin, async (req, res) => {
+  const { author, role, rating, text } = req.body || {};
+  if (!author || !String(author).trim()) return res.status(400).json({ error: "Укажите автора" });
+  if (!text || !String(text).trim()) return res.status(400).json({ error: "Укажите текст отзыва" });
+  try {
+    const [result] = await pool.query(
+      "INSERT INTO site_reviews (author, role, rating, text) VALUES (?, ?, ?, ?)",
+      [String(author).trim(), role || "", Math.min(5, Math.max(1, Number(rating) || 5)), String(text).trim()]
+    );
+    res.json({ success: true, id: result.insertId });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/api/admin/site-reviews/:id", requireAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM site_reviews WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ============ АДМИН: ЗАЯВКИ ============
+app.get("/api/admin/requests", requireAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM consultation_requests ORDER BY created_at DESC");
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete("/api/admin/requests/:id", requireAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM consultation_requests WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.delete("/api/admin/courses/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM courses WHERE id = ?", [req.params.id]);
@@ -1050,11 +1276,157 @@ async function seedSections() {
   }
 }
 
+async function getOrCreateInstructor(profile) {
+  const [found] = await pool.query("SELECT id FROM instructors WHERE name = ?", [profile.name]);
+  if (found.length) return found[0].id;
+  const [ins] = await pool.query(
+    "INSERT INTO instructors (name, specialty, bio, experience, avatar) VALUES (?, ?, ?, ?, ?)",
+    [profile.name, profile.specialty, profile.bio, profile.experience, profile.avatar]
+  );
+  return ins.insertId;
+}
+
+// Дозаполнение разделов: специалисты, изображения, галереи и отзывы для детальных страниц
+async function seedSectionsExtras() {
+  // Специалист для услуг
+  const therapistProfile = {
+    name: "Анна Матвеева",
+    specialty: "Массажист-терапевт, стаж 12 лет",
+    bio: "Ведущий специалист по классическому, лечебному и лимфодренажному массажу. Проводит обучение мастеров, ведёт приём и контролирует качество сеансов.",
+    experience: "12 лет",
+    avatar: "/uploads/svetlana.svg",
+  };
+  const [svcNoInst] = await pool.query("SELECT id FROM services WHERE instructor_id IS NULL");
+  if (svcNoInst.length) {
+    const therapistId = await getOrCreateInstructor(therapistProfile);
+    for (const s of svcNoInst) {
+      await pool.query("UPDATE services SET instructor_id = ? WHERE id = ?", [therapistId, s.id]);
+    }
+  }
+
+  // Профили экспертов для консультаций
+  const expertProfiles = {
+    "Сергей Морозов": {
+      name: "Сергей Морозов", specialty: "Врач-реабилитолог", experience: "10 лет",
+      bio: "Врач-реабилитолог, специалист по коррекции осанки и работе с болями в спине. Помогает составить план восстановления и выбрать подходящие техники массажа.",
+      avatar: "/uploads/course-spine.svg",
+    },
+    "Ирина Соколова": {
+      name: "Ирина Соколова", specialty: "Методист образовательных программ", experience: "8 лет",
+      bio: "Методист и преподаватель школы массажа. Помогает выбрать программу обучения под ваши цели, опыт и удобный график.",
+      avatar: "/uploads/course-classic.svg",
+    },
+    "Елена Кузнецова": {
+      name: "Елена Кузнецова", specialty: "Специалист по детскому массажу", experience: "9 лет",
+      bio: "Сертифицированный специалист по детскому массажу и гимнастике. Даёт индивидуальные рекомендации для малышей от 0 до 3 лет.",
+      avatar: "/uploads/course-kids.svg",
+    },
+    "Ким Сурайя": {
+      name: "Ким Сурайя", specialty: "Тренер по тайскому массажу", experience: "15 лет",
+      bio: "Преподаватель традиционного тайского массажа. Проводит разбор техник давления и стрейчинга для практикующих массажистов.",
+      avatar: "/uploads/course-thai.svg",
+    },
+  };
+  const [consNoInst] = await pool.query("SELECT id, expert FROM consultations WHERE instructor_id IS NULL AND expert <> ''");
+  for (const c of consNoInst) {
+    const prof = expertProfiles[c.expert];
+    if (!prof) continue;
+    const instId = await getOrCreateInstructor(prof);
+    await pool.query("UPDATE consultations SET instructor_id = ? WHERE id = ?", [instId, c.id]);
+  }
+
+  // Основные изображения для услуг и консультаций
+  const svcImg = {
+    "Классический массаж": "/uploads/course-classic.svg",
+    "Массаж спины и шеи": "/uploads/course-spine.svg",
+    "Спортивный массаж": "/uploads/course-sport.svg",
+    "Тайский массаж": "/uploads/course-thai.svg",
+    "Детский массаж": "/uploads/course-kids.svg",
+    "Лимфодренажный массаж": "/uploads/course-limfo.svg",
+  };
+  const [svcNoImg] = await pool.query("SELECT id, name FROM services WHERE image_url = ''");
+  for (const s of svcNoImg) {
+    const url = svcImg[s.name] || "/uploads/course-classic.svg";
+    await pool.query("UPDATE services SET image_url = ? WHERE id = ?", [url, s.id]);
+  }
+  const consImg = {
+    "Разбор осанки и болей в спине": "/uploads/lesson-anatomy.svg",
+    "Подбор курса массажа": "/uploads/lesson-hands.svg",
+    "Консультация по детскому массажу": "/uploads/lesson-baby.svg",
+    "Техника тайского массажа": "/uploads/lesson-thai.svg",
+  };
+  const [consNoImg] = await pool.query("SELECT id, title FROM consultations WHERE image_url = ''");
+  for (const c of consNoImg) {
+    const url = consImg[c.title] || "/uploads/lesson-hands.svg";
+    await pool.query("UPDATE consultations SET image_url = ? WHERE id = ?", [url, c.id]);
+  }
+
+  // Галереи изображений
+  async function ensureGallery(type, table, imgMap, extraMap) {
+    const [rows] = await pool.query(`SELECT id, ${type === "product" ? "name" : type === "service" ? "name" : "title"} AS title, image_url FROM ${table}`);
+    for (const r of rows) {
+      const [has] = await pool.query("SELECT id FROM item_images WHERE item_type = ? AND item_id = ? LIMIT 1", [type, r.id]);
+      if (has.length) continue;
+      const urls = [r.image_url || imgMap[r.title] || "/uploads/course-default.svg"];
+      const extra = extraMap[r.title];
+      if (extra) for (const u of extra) if (!urls.includes(u)) urls.push(u);
+      for (let i = 0; i < urls.length; i++) {
+        await pool.query(
+          "INSERT INTO item_images (item_type, item_id, url, position) VALUES (?, ?, ?, ?)",
+          [type, r.id, urls[i], i]
+        );
+      }
+    }
+  }
+  await ensureGallery("product", "products", {}, {});
+  await ensureGallery("service", "services", svcImg, {
+    "Классический массаж": ["/uploads/lesson-hands.svg"],
+    "Массаж спины и шеи": ["/uploads/lesson-neck.svg"],
+    "Спортивный массаж": ["/uploads/lesson-sport.svg"],
+    "Тайский массаж": ["/uploads/lesson-thai.svg"],
+    "Детский массаж": ["/uploads/lesson-baby.svg"],
+    "Лимфодренажный массаж": ["/uploads/lesson-pressure.svg"],
+  });
+  await ensureGallery("consultation", "consultations", consImg, {
+    "Разбор осанки и болей в спине": ["/uploads/course-spine.svg"],
+    "Подбор курса массажа": ["/uploads/course-classic.svg"],
+    "Консультация по детскому массажу": ["/uploads/course-kids.svg"],
+    "Техника тайского массажа": ["/uploads/course-thai.svg"],
+  });
+
+  // Отзывы для детальных страниц
+  const reviewPool = [
+    ["Анна К.", 5, "Всё на высшем уровне! Рекомендую."],
+    ["Дмитрий П.", 5, "Профессиональный подход, всё чётко и по делу."],
+    ["Марина В.", 4, "Отличный результат, обязательно обращусь ещё."],
+    ["Олег С.", 5, "Специалист — профессионал своего дела."],
+    ["Екатерина Л.", 4, "Хорошая организация и внимательное отношение."],
+    ["Игорь Т.", 5, "Превысило ожидания. Спасибо за работу!"],
+  ];
+  for (const type of Object.keys(ITEM_TYPES)) {
+    const table = ITEM_TYPES[type];
+    const [rows] = await pool.query(`SELECT id FROM ${table}`);
+    for (const r of rows) {
+      const [cnt] = await pool.query("SELECT COUNT(*) AS c FROM item_reviews WHERE item_type = ? AND item_id = ?", [type, r.id]);
+      if (cnt[0].c) continue;
+      const count = 1 + (r.id % 3);
+      for (let i = 0; i < count; i++) {
+        const rv = reviewPool[(r.id + i) % reviewPool.length];
+        await pool.query(
+          "INSERT INTO item_reviews (item_type, item_id, author, rating, comment) VALUES (?, ?, ?, ?, ?)",
+          [type, r.id, rv[0], rv[1], rv[2]]
+        );
+      }
+    }
+  }
+}
+
 app.listen(PORT, async () => {
   try {
     await initSchema();
     await seed();
     await seedSections();
+    await seedSectionsExtras();
     console.log(`Сайт курсов запущен: http://localhost:${PORT}`);
     console.log("Админ: admin@courses.ru / admin123");
     console.log("Пользователь: user@courses.ru / user123");

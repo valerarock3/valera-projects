@@ -14,7 +14,10 @@
   </nav>
 
   <div class="container">
-    <h1 class="page-title" data-i18n="products">Товары</h1>
+    <div class="page-hero">
+      <h1 data-i18n="products">Товары</h1>
+      <p class="page-sub" data-i18n="productsSub">Масла, инструменты и всё необходимое для кабинета массажиста</p>
+    </div>
     <div class="card-grid" id="products-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
   </div>
 
@@ -28,7 +31,7 @@
       const data = await apiFetch("/api/products");
       if (!data.length) { grid.innerHTML = `<div class="empty">${t("noProducts")}</div>`; return; }
       grid.innerHTML = data.map(p => `
-        <div class="product-card">
+        <div class="product-card" onclick="location.href='item.html?type=product&id=${p.id}'">
           <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
           <div class="product-body">
             <div class="product-cat">${escapeHtml(p.category || "")}</div>
@@ -38,7 +41,7 @@
               <span class="product-price">${fmtPrice(p.price)}</span>
               <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="alert('${t("order")}: ${escapeHtml(p.name).replace(/'/g, "\\'")}')">${t("buy")}</button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=product&id=${p.id}'">${t("details")}</button>
           </div>
         </div>
       `).join("");

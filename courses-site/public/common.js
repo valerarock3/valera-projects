@@ -70,15 +70,36 @@ async function fetchMe() {
   } catch { return null; }
 }
 
+function getPageName() {
+  return (window.location.pathname.split("/").pop() || "index.html");
+}
+
+function sectionLinks() {
+  const cur = getPageName();
+  const links = [
+    ["index.html", "home"],
+    ["catalog.html", "sectionCourses"],
+    ["products.html", "products"],
+    ["services.html", "services"],
+    ["consultation.html", "consultation"],
+    ["reviews.html", "reviews"],
+  ];
+  return links.map(([href, key]) =>
+    `<a class="nav-btn${cur === href ? " active" : ""}" href="${href}" data-i18n="${key}">${t(key)}</a>`
+  ).join("");
+}
+
 function renderNav() {
   const nav = document.getElementById("nav-links");
   if (!nav) return;
   const themeBtn = `<button class="icon-btn" id="theme-btn" title="${theme === "dark" ? t("themeLight") : t("themeDark")}">${theme === "dark" ? "☀" : "🌙"}</button>`;
   const langBtn = `<button class="icon-btn" id="lang-btn" title="Language">${lang === "ru" ? "🇬🇧" : "🇷🇺"}</button>`;
+  const sLinks = sectionLinks();
   fetchMe().then(user => {
     if (user) {
       const adminLink = user.role === "admin" ? `<a class="nav-btn" href="admin.html" data-i18n="admin">${t("admin")}</a>` : "";
       nav.innerHTML = `
+        ${sLinks}
         ${themeBtn}
         ${langBtn}
         ${adminLink}
@@ -92,6 +113,7 @@ function renderNav() {
       });
     } else {
       nav.innerHTML = `
+        ${sLinks}
         ${themeBtn}
         ${langBtn}
         <a class="nav-btn" href="register.html" data-i18n="registration">${t("registration")}</a>
@@ -182,3 +204,42 @@ function translateError(msg) {
   };
   return map[msg] || msg;
 }
+
+function injectFooter() {
+  if (document.getElementById("site-footer")) return;
+  const footer = document.createElement("footer");
+  footer.className = "site-footer";
+  footer.id = "site-footer";
+  const year = new Date().getFullYear();
+  footer.innerHTML = `
+    <div class="footer-grid">
+      <div>
+        <div class="footer-brand">🎓 ${t("siteName")}</div>
+        <p class="footer-about">${t("footerAbout")}</p>
+      </div>
+      <div class="footer-col">
+        <h4>${t("footerQuick")}</h4>
+        <a href="index.html">${t("home")}</a>
+        <a href="catalog.html">${t("sectionCourses")}</a>
+        <a href="products.html">${t("products")}</a>
+        <a href="services.html">${t("services")}</a>
+        <a href="reviews.html">${t("reviews")}</a>
+      </div>
+      <div class="footer-col">
+        <h4>${t("footerContacts")}</h4>
+        <a href="consultation.html">${t("consultation")}</a>
+        <a href="mailto:support@courses.ru">support@courses.ru</a>
+        <a href="tel:+79990000000">+7 999 000-00-00</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© ${year} ${t("siteName")}</span>
+      <span>${t("rightsReserved")}</span>
+    </div>`;
+  document.body.appendChild(footer);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  applyI18n();
+  injectFooter();
+});

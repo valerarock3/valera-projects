@@ -14,7 +14,10 @@
   </nav>
 
   <div class="container">
-    <h1 class="page-title" data-i18n="sectionConsultation">Консультация специалиста</h1>
+    <div class="page-hero">
+      <h1 data-i18n="sectionConsultation">Консультация специалиста</h1>
+      <p class="page-sub" data-i18n="consultationSub">Индивидуальные консультации специалистов по любым вопросам</p>
+    </div>
     <div class="card-grid" id="consultations-grid"><div class="loading" data-i18n="loading">Загрузка...</div></div>
 
     <div class="section">
@@ -49,7 +52,7 @@
       const data = await apiFetch("/api/consultations");
       if (!data.length) { grid.innerHTML = `<div class="empty">${t("noConsultations")}</div>`; return; }
       grid.innerHTML = data.map(c => `
-        <div class="consult-card">
+        <div class="consult-card" onclick="location.href='item.html?type=consultation&id=${c.id}'">
           <span class="consult-title">${escapeHtml(c.title)}</span>
           <span class="consult-expert">${t("expert")}: ${escapeHtml(c.expert || "")}</span>
           <span class="consult-desc">${escapeHtml(c.description || "")}</span>
@@ -58,7 +61,7 @@
             <span class="price ${Number(c.price) === 0 ? "free" : ""}">${Number(c.price) === 0 ? t("free") : fmtPrice(c.price)}</span>
           </div>
           <div class="consult-footer">
-            <button class="btn btn-primary btn-sm" onclick="bookConsultation(${c.id}, '${escapeHtml(c.title).replace(/'/g, "\\'")}')">${t("bookConsultation")}</button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();bookConsultation(${c.id}, '${escapeHtml(c.title).replace(/'/g, "\\'")}')">${t("bookConsultation")}</button>
           </div>
         </div>
       `).join("");
@@ -98,6 +101,12 @@
   });
 
   loadConsultations();
+
+  const subjectParam = new URLSearchParams(location.search).get("subject");
+  if (subjectParam) {
+    const askEl = document.getElementById("consult-ask");
+    if (askEl) { askEl.value = subjectParam; askEl.focus(); }
+  }
   </script>
 </body>
 </html>

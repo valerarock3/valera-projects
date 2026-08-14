@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Запись</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="logo">🎓 Курсы</a>
+    <div class="nav-links" id="nav-links"></div>
+    <button class="nav-toggle" id="nav-toggle" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+  </nav>
+
+  <div class="container" id="item-container"><div class="loading">Загрузка...</div></div>
+
+  <script src="translations.js"></script>
+  <script src="common.js"></script>
+  <script>
+    const type = new URLSearchParams(location.search).get("type");
+    const id = new URLSearchParams(location.search).get("id");
+    let me = null;
+
+    const CFG = {
+      product: { list: "products.html", titleKey: "products" },
+      service: { list: "services.html", titleKey: "services" },
+      consultation: { list: "consultation.html", titleKey: "consultation" },
+    };
+    const cfg = CFG[type] || null;
+
+    function starsHtml(rating) {
+      const r = Math.min(5, Math.max(0, Number(rating) || 0));
+      return "★".repeat(r) + "☆".repeat(5 - r);
+    }
+
+    function instructorCardHtml(item) {
+      if (!item.instructor_info) return "";
+      const a = item.instructor_info;
+      return `
+        <div class="author-card card">
+          <img src="${escapeHtml(a.avatar || "/uploads/svetlana.svg")}" alt="">
+          <div>
+            <div class="ac-label">${t("specialist")}</div>
+            <div class="ac-name"><a class="author-link" href="author.html?id=${a.id}">${escapeHtml(a.name)}</a></div>
+            ${a.specialty ? `<div class="ac-spec">${escapeHtml(a.specialty)}</div>` : ""}
+            <a class="btn btn-outline btn-sm" href="author.html?id=${a.id}" style="margin-top:8px">${t("viewProfile")} →</a>
+          </div>
+        </div>`;
+    }
+
+    function galleryHtml(item) {
+      const images = item.images && item.images.length ? item.images : ["/uploads/course-default.svg"];
+      const main = images[0];
+      const thumbs = images.slice(1);
+      return `
+        <div class="item-gallery">
+          <div class="ig-main"><img src="${escapeHtml(main)}" alt="" id="ig-main"></div>
+          ${thumbs.length ? `<div class="ig-thumbs">${thumbs.map((u, i) => `
+            <img class="ig-thumb${i === 0 ? " active" : ""}" src="${escapeHtml(u)}" alt="" onclick="setMain(this)">`).join("")}
+          </div>` : ""}
+        </div>`;
+    }
+
+    function metaHtml(item) {
+      const parts = [];
+      if (item.duration_min) parts.push(`<span>⏱ ${item.duration_min} ${t("minLabel")}</span>`);
+      if (type === "product") {
+        parts.push(`<span class="badge-stock ${item.in_stock ? "in" : "out"}">${item.in_stock ? t("inStock") : t("outOfStock")}</span>`);
+      }
+      return parts.length ? `<div class="item-meta">${parts.join("")}</div>` : "";
+    }
+
+    function ctaHtml(item) {
+      if (type === "product") {
+        if (!item.in_stock) return "";
+        return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("🛍 " + (item.name || ""))}">${t("orderShort")}</a>`;
+      }
+      if (type === "service") {
+        return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("💆 " + (item.name || ""))}">${t("bookService")}</a>`;
+      }
+      return `<a class="btn btn-primary" style="width:100%" href="consultation.html?subject=${encodeURIComponent("📞 " + (item.title || ""))}">${t("bookConsultation")}</a>`;
+    }
+
+    function reviewsHtml(item) {
+      const avg = item.avg_rating ? `⭐ ${t("rating")}: ${item.avg_rating} (${item.reviews.length})` : "";
+      const form = me
+        ? `
+        <div class="card mt-16">
+          <h4 style="margin-bottom:12px">${t("leaveReview")}</h4>
+          <div class="form-group">
+            <label>${t("ratingLabel")}</label>
+            <select id="item-review-rating">
+              <option value="5">${t("rating5")}</option>
+              <option value="4">${t("rating4")}</option>
+              <option value="3">${t("rating3")}</option>
+              <option value="2">${t("rating2")}</option>
+              <option value="1">${t("rating1")}</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>${t("commentLabel")}</label>
+            <textarea id="item-review-comment" placeholder="${t("commentPh")}"></textarea>
+          </div>
+          <div class="form-error" id="item-review-error"></div>
+          <button class="btn btn-primary" id="item-review-btn">${t("sendReview")}</button>
+        </div>`
+        : `<div class="empty">${t("loginToReview")} <a class="author-link" href="login.html">${t("login")}</a></div>`;
+      const list = item.reviews.length
+        ? item.reviews.map(r => `
+            <div class="review-item">
+              <span class="stars">${starsHtml(r.rating)}</span>
+              <span class="ruser"> ${escapeHtml(r.author)}</span>
+              <div class="rtext">${nl2br(r.comment || "")}</div>
+            </div>`).join("")
+        : `<div class="empty">${t("noItemReviews")}</div>`;
+      return `
+        <div class="reviews">
+          <h3 class="page-title" style="font-size:20px">${t("reviews")} (${item.reviews.length}) ${avg}</h3>
+          ${form}
+          ${list}
+        </div>`;
+    }
+
+    async function loadItem() {
+      const container = document.getElementById("item-container");
+      if (!cfg) { container.innerHTML = `<div class="empty">${t("itemNotFound")}</div>`; return; }
+      try {
+        me = await fetchMe();
+        const item = await apiFetch(`/api/items/${type}/${id}`);
+        const title = item.name || item.title || "";
+        const cat = type === "product" ? item.category : (item.expert || "");
+        container.innerHTML = `
+          <a class="back-link" href="${cfg.list}">← ${t(cfg.titleKey)}</a>
+          <div class="course-detail-grid mt-16">
+            <div class="course-hero">
+              ${galleryHtml(item)}
+              ${cat ? `<div class="cat">${escapeHtml(cat)}</div>` : ""}
+              <h1>${escapeHtml(title)}</h1>
+              ${metaHtml(item)}
+              <div class="desc">${escapeHtml(item.description || "")}</div>
+              ${instructorCardHtml(item)}
+              ${reviewsHtml(item)}
+            </div>
+            <div class="enroll-card card item-info-card">
+              <div class="price">${fmtPrice(item.price)}</div>
+              ${ctaHtml(item)}
+            </div>
+          </div>`;
+        wireReview();
+      } catch (err) {
+        container.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function setMain(el) {
+      const main = document.getElementById("ig-main");
+      if (main) main.src = el.src;
+      document.querySelectorAll(".ig-thumb").forEach(t => t.classList.toggle("active", t === el));
+    }
+
+    function wireReview() {
+      const btn = document.getElementById("item-review-btn");
+      if (!btn) return;
+      btn.addEventListener("click", async () => {
+        const err = document.getElementById("item-review-error");
+        err.classList.remove("show");
+        const rating = document.getElementById("item-review-rating").value;
+        const comment = document.getElementById("item-review-comment").value.trim();
+        if (!comment) { err.textContent = t("fillReview"); err.classList.add("show"); return; }
+        try {
+          await apiFetch(`/api/items/${type}/${id}/review`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rating, comment }),
+          });
+          loadItem();
+        } catch (e) {
+          err.textContent = e.message;
+          err.classList.add("show");
+        }
+      });
+    }
+
+    loadItem();
+  </script>
+</body>
+</html>
