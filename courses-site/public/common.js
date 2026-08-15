@@ -118,7 +118,7 @@ function renderNav() {
         ${langBtn}
         ${adminLink}
         <a class="nav-btn" href="profile.html" data-i18n="myCourses">${t("myCourses")}</a>
-        <span class="nav-user">👤 ${escapeHtml(user.name)}</span>
+        <span class="nav-user">${user.avatar ? `<img class="nav-avatar" src="${escapeHtml(user.avatar)}" alt="">` : "👤"}<span class="nav-user-name">${escapeHtml(user.name)}</span></span>
         <a class="nav-btn" href="#" id="logout-btn" data-i18n="logout">${t("logout")}</a>`;
       document.getElementById("logout-btn").addEventListener("click", async (e) => {
         e.preventDefault();

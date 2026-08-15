@@ -384,6 +384,11 @@ const TRANSLATIONS = {
     courseWord: "Курс",
     methodCol: "Метод",
     amountCol: "Сумма",
+    changeAvatar: "Изменить аватар",
+    removeAvatar: "Удалить",
+    avatarUpdated: "Аватар обновлён",
+    avatarRemoved: "Аватар удалён",
+    demoHint: "Демо-доступ: user@courses.ru / user123",
   },
   en: {
     siteName: "🎓 Courses",
@@ -768,5 +773,10 @@ const TRANSLATIONS = {
     courseWord: "Course",
     methodCol: "Method",
     amountCol: "Amount",
+    changeAvatar: "Change avatar",
+    removeAvatar: "Remove",
+    avatarUpdated: "Avatar updated",
+    avatarRemoved: "Avatar removed",
+    demoHint: "Demo access: user@courses.ru / user123",
   },
 };

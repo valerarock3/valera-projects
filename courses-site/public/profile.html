@@ -15,6 +15,21 @@
 
   <div class="container">
     <h1 class="page-title" data-i18n="myCourses">Мои курсы</h1>
+    <div class="profile-head" id="profile-head" style="display:none">
+      <div class="avatar-wrap" id="avatar-wrap">
+        <img id="avatar-img" alt="avatar">
+        <span id="avatar-initial">?</span>
+      </div>
+      <div class="profile-info">
+        <div class="profile-name" id="profile-name"></div>
+        <div class="profile-email" id="profile-email"></div>
+      </div>
+      <div class="avatar-actions">
+        <label class="btn btn-outline btn-sm" for="avatar-input" data-i18n="changeAvatar">Изменить аватар</label>
+        <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+        <button class="btn btn-outline btn-sm" id="avatar-remove" style="display:none" data-i18n="removeAvatar">Удалить</button>
+      </div>
+    </div>
     <div class="profile-tabs">
       <button class="profile-tab active" data-tab="courses" data-i18n="myCourses">Мои курсы</button>
       <button class="profile-tab" data-tab="purchases" data-i18n="myPurchases">Мои покупки</button>
@@ -132,6 +147,60 @@
         ${bookings.length ? `<h3 style="margin:16px 0 8px">${t("bookingsWord")}</h3>${bookingCards}` : ""}`;
     }
 
+    function renderAvatar(url) {
+      const img = document.getElementById("avatar-img");
+      const init = document.getElementById("avatar-initial");
+      document.getElementById("avatar-remove").style.display = url ? "" : "none";
+      if (url) {
+        img.src = url;
+        img.style.display = "block";
+        init.style.display = "none";
+      } else {
+        img.removeAttribute("src");
+        img.style.display = "none";
+        init.style.display = "flex";
+      }
+    }
+
+    async function loadProfile() {
+      const me = await fetchMe();
+      if (!me) return;
+      const head = document.getElementById("profile-head");
+      head.style.display = "flex";
+      document.getElementById("profile-name").textContent = me.name;
+      document.getElementById("profile-email").textContent = me.email + (me.phone ? " · " + me.phone : "");
+      renderAvatar(me.avatar);
+      wireAvatar();
+    }
+
+    function wireAvatar() {
+      const input = document.getElementById("avatar-input");
+      if (!input || input.dataset.wired) return;
+      input.dataset.wired = "1";
+      input.addEventListener("change", async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append("file", file);
+        const btn = document.querySelector('label[for="avatar-input"]');
+        btn.textContent = t("uploading");
+        try {
+          const data = await apiFetch("/api/avatar", { method: "POST", body: fd });
+          renderAvatar(data.avatar);
+          alert(t("avatarUpdated"));
+        } catch (err) { alert(err.message); }
+        btn.textContent = t("changeAvatar");
+        input.value = "";
+      });
+      document.getElementById("avatar-remove").addEventListener("click", async () => {
+        try {
+          await apiFetch("/api/avatar", { method: "DELETE" });
+          renderAvatar("");
+          alert(t("avatarRemoved"));
+        } catch (err) { alert(err.message); }
+      });
+    }
+
     function wireTabs() {
       document.querySelectorAll(".profile-tab").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -156,6 +225,7 @@
     renderNav();
     wireTabs();
     loadCourses();
+    loadProfile();
   </script>
 </body>
 </html>

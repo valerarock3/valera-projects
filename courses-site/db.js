@@ -20,6 +20,7 @@ async function initSchema() {
         email VARCHAR(190) NOT NULL UNIQUE,
         password_hash VARCHAR(255) NOT NULL,
         phone VARCHAR(30) NOT NULL DEFAULT '',
+        avatar VARCHAR(500) NOT NULL DEFAULT '',
         role ENUM('user','admin') NOT NULL DEFAULT 'user',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -28,6 +29,9 @@ async function initSchema() {
     const [userCols] = await conn.query("SHOW COLUMNS FROM users");
     if (!userCols.map(c => c.Field).includes("phone")) {
       await conn.query("ALTER TABLE users ADD COLUMN phone VARCHAR(30) NOT NULL DEFAULT ''");
+    }
+    if (!userCols.map(c => c.Field).includes("avatar")) {
+      await conn.query("ALTER TABLE users ADD COLUMN avatar VARCHAR(500) NOT NULL DEFAULT ''");
     }
 
     await conn.query(`

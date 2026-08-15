@@ -68,7 +68,19 @@ body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; background: var(--
 .navbar a.nav-btn { color: var(--text-dim); text-decoration: none; font-size: 14px; font-weight: 500; padding: 8px 14px; border-radius: 10px; transition: all .2s; }
 .navbar a.nav-btn:hover { color: var(--text); background: var(--accent-soft); }
 .navbar a.nav-btn.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
-.navbar .nav-user { color: var(--accent); font-size: 14px; }
+.navbar .nav-user { color: var(--accent); font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.nav-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent); }
+
+.profile-head { display: flex; align-items: center; gap: 18px; background: var(--bg-soft); border: 1px solid var(--border); border-radius: 16px; padding: 18px 20px; margin-bottom: 20px; flex-wrap: wrap; }
+.avatar-wrap { position: relative; width: 84px; height: 84px; flex-shrink: 0; border-radius: 50%; overflow: hidden; background: var(--grad-primary); display: flex; align-items: center; justify-content: center; }
+.avatar-wrap img { width: 100%; height: 100%; object-fit: cover; display: none; }
+.avatar-wrap #avatar-initial { color: #fff; font-size: 36px; font-weight: 800; display: none; align-items: center; justify-content: center; }
+.profile-info { flex: 1; min-width: 160px; }
+.profile-name { font-size: 20px; font-weight: 700; }
+.profile-email { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+.avatar-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-sm { padding: 7px 12px; font-size: 13px; cursor: pointer; }
+.demo-login { width: 100%; margin-top: 10px; color: var(--text-dim); }
 
 .nav-toggle {
   display: none; flex-direction: column; justify-content: center; gap: 5px;

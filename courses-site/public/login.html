@@ -26,6 +26,7 @@
         <input type="password" id="password" placeholder="••••••••">
       </div>
       <button class="btn btn-primary" id="login-btn" data-i18n="loginBtn">Войти</button>
+      <button class="btn btn-outline btn-sm demo-login" id="demo-login" data-i18n="demoHint">Демо-доступ: user@courses.ru / user123</button>
       <div class="form-hint"><a href="forgot-password.html" data-i18n="forgotPass">Забыли пароль?</a></div>
       <div class="form-hint" data-i18n="noAccount">Нет аккаунта? <a href="register.html" id="reg-link" data-i18n="registration">Зарегистрироваться</a></div>
     </div>
@@ -55,6 +56,12 @@
 
     document.getElementById("password").addEventListener("keydown", (e) => {
       if (e.key === "Enter") document.getElementById("login-btn").click();
+    });
+
+    document.getElementById("demo-login").addEventListener("click", () => {
+      document.getElementById("email").value = "user@courses.ru";
+      document.getElementById("password").value = "user123";
+      document.getElementById("login-btn").click();
     });
 
     initTheme();

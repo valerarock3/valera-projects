@@ -120,6 +120,70 @@ app.post("/api/upload", requireAdmin, (req, res) => {
   });
 });
 
+// Загрузка аватара пользователя: только изображения, до 5 МБ.
+// Имя файла помечается префиксом "avatar-" — по нему безопасно чистить старые файлы.
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase() || ".png";
+      cb(null, "avatar-" + Date.now() + "-" + Math.round(Math.random() * 1e6) + ext);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /^image\/(png|jpeg|webp|gif)$/.test(file.mimetype) &&
+      /\.(png|jpe?g|webp|gif)$/i.test(file.originalname);
+    cb(ok ? null : new Error("Недопустимый тип файла"), ok);
+  },
+});
+
+function avatarFilename(url) {
+  if (typeof url !== "string" || !url.startsWith("/api/media/")) return null;
+  const name = path.basename(url);
+  // Удаляем только файлы, созданные загрузкой аватара (avatar-<ts>-<rand>.<ext>),
+  // чтобы не задеть сидовый дефолтный аватар avatar-user.svg
+  if (!/^avatar-\d+-\d+\./.test(name)) return null;
+  return name;
+}
+
+function removeAvatarFile(url) {
+  const name = avatarFilename(url);
+  if (!name) return;
+  const full = path.join(UPLOAD_DIR, name);
+  if (full.startsWith(UPLOAD_DIR) && fs.existsSync(full)) {
+    fs.unlink(full, () => {});
+  }
+}
+
+app.post("/api/avatar", requireAuth, (req, res) => {
+  avatarUpload.single("file")(req, res, async (err) => {
+    if (err) return res.status(400).json({ error: err.message });
+    if (!req.file) return res.status(400).json({ error: "Файл не загружен" });
+    const url = "/api/media/" + req.file.filename;
+    try {
+      const oldUrl = req.session.user.avatar || "";
+      await pool.query("UPDATE users SET avatar = ? WHERE id = ?", [url, req.session.user.id]);
+      req.session.user.avatar = url;
+      removeAvatarFile(oldUrl);
+      res.json({ avatar: url });
+    } catch (e) {
+      removeAvatarFile(url);
+      serverError(res, e);
+    }
+  });
+});
+
+app.delete("/api/avatar", requireAuth, async (req, res) => {
+  try {
+    const oldUrl = req.session.user.avatar || "";
+    await pool.query("UPDATE users SET avatar = '' WHERE id = ?", [req.session.user.id]);
+    req.session.user.avatar = "";
+    removeAvatarFile(oldUrl);
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
+});
+
 const PROTECTED_MEDIA_RE = /\.(mp4|webm|mov|mkv|avi|m4v|ogv|mp3|wav|m4a|aac|oga|flac|ogg)$/i;
 
 // Защищённая раздача файлов: видео и аудио доступны только авторизованным
@@ -305,8 +369,21 @@ function parseQuiz(raw) {
     });
 }
 
-app.get("/api/me", (req, res) => {
-  res.json({ user: req.session.user || null });
+app.get("/api/me", async (req, res) => {
+  if (!req.session.user) return res.json({ user: null });
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, name, email, phone, role, avatar FROM users WHERE id = ?",
+      [req.session.user.id]
+    );
+    if (!rows.length) return res.json({ user: null });
+    const user = {
+      id: rows[0].id, name: rows[0].name, email: rows[0].email,
+      phone: rows[0].phone || "", role: rows[0].role, avatar: rows[0].avatar || "",
+    };
+    req.session.user = user;
+    res.json({ user });
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/register",
@@ -327,7 +404,7 @@ app.post("/api/register",
       "INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)",
       [name, email, phoneDigits, hash]
     );
-    const user = { id: result.insertId, name, email, phone: phoneDigits, role: "user" };
+    const user = { id: result.insertId, name, email, phone: phoneDigits, role: "user", avatar: "" };
     await regenerateSession(req);
     req.session.user = user;
     res.json({ user });
@@ -344,7 +421,7 @@ app.post("/api/login",
     if (!rows.length) return res.status(401).json({ error: "Неверный email или пароль" });
     const ok = await bcrypt.compare(password, rows[0].password_hash);
     if (!ok) return res.status(401).json({ error: "Неверный email или пароль" });
-    const user = { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone || "", role: rows[0].role };
+    const user = { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone || "", role: rows[0].role, avatar: rows[0].avatar || "" };
     await regenerateSession(req);
     req.session.user = user;
     res.json({ user });
@@ -1510,8 +1587,38 @@ async function seed() {
   );
   const userHash = await bcrypt.hash("user123", 10);
   await pool.query(
-    "INSERT IGNORE INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'user')",
-    ["Тестовый пользователь", "user@courses.ru", userHash]
+    "INSERT IGNORE INTO users (name, email, phone, password_hash, role, avatar) VALUES (?, ?, ?, ?, 'user', ?)",
+    ["Тестовый пользователь", "user@courses.ru", "79990000001", userHash, "/api/media/avatar-user.svg"]
+  );
+}
+
+// Профиль тестового пользователя: запись на первый курс + оплата, чтобы личный
+// кабинет выглядел заполненным. Безопасно вызывать на каждом старте.
+async function seedTestUser() {
+  const userHash = await bcrypt.hash("user123", 10);
+  await pool.query(
+    "INSERT IGNORE INTO users (name, email, phone, password_hash, role, avatar) VALUES (?, ?, ?, ?, 'user', ?)",
+    ["Тестовый пользователь", "user@courses.ru", "79990000001", userHash, "/api/media/avatar-user.svg"]
+  );
+  await pool.query(
+    "UPDATE users SET avatar = ?, phone = ? WHERE email = 'user@courses.ru'",
+    ["/api/media/avatar-user.svg", "79990000001"]
+  );
+  const [users] = await pool.query("SELECT id FROM users WHERE email = 'user@courses.ru'");
+  if (!users.length) return;
+  const uid = users[0].id;
+  const [enr] = await pool.query("SELECT 1 FROM enrollments WHERE user_id = ? LIMIT 1", [uid]);
+  if (enr.length) return;
+  const [courses] = await pool.query("SELECT id, title, price FROM courses ORDER BY id LIMIT 1");
+  if (!courses.length) return;
+  const c = courses[0];
+  await pool.query(
+    "INSERT IGNORE INTO enrollments (user_id, course_id, progress) VALUES (?, ?, ?)",
+    [uid, c.id, 40]
+  );
+  await pool.query(
+    "INSERT IGNORE INTO payments (user_id, course_id, item_type, item_title, amount, status, method) VALUES (?, ?, 'course', ?, ?, 'completed', 'qr')",
+    [uid, c.id, c.title, c.price]
   );
 }
 
@@ -1743,6 +1850,7 @@ app.listen(PORT, async () => {
     await seed();
     await seedSections();
     await seedSectionsExtras();
+    await seedTestUser();
     console.log(`Сайт курсов запущен: http://localhost:${PORT}`);
     console.log("Админ: admin@courses.ru / admin123");
     console.log("Пользователь: user@courses.ru / user123");
