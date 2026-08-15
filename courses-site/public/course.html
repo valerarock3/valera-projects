@@ -250,6 +250,7 @@
         <button class="btn btn-outline" id="sms-resend" style="width:100%;margin-top:8px" data-i18n="smsResend">Отправить код повторно</button>
       `;
       applyI18n();
+      wireInputGuards();
       const input = document.getElementById("sms-code");
       input.focus();
       input.addEventListener("input", () => {

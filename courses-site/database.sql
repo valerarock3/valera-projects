@@ -16,12 +16,39 @@
 /*!40111 SET @OLD_SQL_NOTES=@@SQL_NOTES, SQL_NOTES=0 */;
 
 --
--- Current Database: `courses_db`
+-- Table structure for table `bookings`
 --
 
-CREATE DATABASE /*!32312 IF NOT EXISTS*/ `courses_db` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+DROP TABLE IF EXISTS `bookings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `bookings` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int NOT NULL,
+  `item_type` enum('service','consultation') NOT NULL,
+  `item_id` int NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `price` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `method` varchar(50) NOT NULL DEFAULT '',
+  `status` enum('new','paid','cancelled') NOT NULL DEFAULT 'new',
+  `booking_date` varchar(20) NOT NULL DEFAULT '',
+  `booking_time` varchar(20) NOT NULL DEFAULT '',
+  `note` varchar(500) NOT NULL DEFAULT '',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `bookings_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
-USE `courses_db`;
+--
+-- Dumping data for table `bookings`
+--
+
+LOCK TABLES `bookings` WRITE;
+/*!40000 ALTER TABLE `bookings` DISABLE KEYS */;
+/*!40000 ALTER TABLE `bookings` ENABLE KEYS */;
+UNLOCK TABLES;
 
 --
 -- Table structure for table `categories`
@@ -35,7 +62,7 @@ CREATE TABLE `categories` (
   `name` varchar(100) NOT NULL,
   `description` text,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -44,7 +71,7 @@ CREATE TABLE `categories` (
 
 LOCK TABLES `categories` WRITE;
 /*!40000 ALTER TABLE `categories` DISABLE KEYS */;
-INSERT INTO `categories` VALUES (1,'Классический массаж','Базовые техники классического массажа: от поглаживаний до глубоких приёмов.'),(2,'Спортивный массаж','Массаж для спортсменов: разминка, восстановление и профилактика травм.'),(3,'Тайский массаж','Традиционные тайские техники: стрейчинг, давление и энергетические линии.'),(4,'Детский массаж','Безопасные техники массажа для малышей и детей разного возраста.');
+INSERT INTO `categories` VALUES (1,'Классический массаж','Базовые техники классического массажа: от поглаживаний до глубоких приёмов.'),(2,'Спортивный массаж','Массаж для спортсменов: разминка, восстановление и профилактика травм.'),(3,'Тайский массаж','Традиционные тайские техники: стрейчинг, давление и энергетические линии.'),(4,'Детский массаж','Безопасные техники массажа для малышей и детей разного возраста.'),(5,'testcat_1786749900878','');
 /*!40000 ALTER TABLE `categories` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -62,7 +89,7 @@ CREATE TABLE `consultation_requests` (
   `subject` varchar(200) NOT NULL DEFAULT '',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=18 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -71,7 +98,7 @@ CREATE TABLE `consultation_requests` (
 
 LOCK TABLES `consultation_requests` WRITE;
 /*!40000 ALTER TABLE `consultation_requests` DISABLE KEYS */;
-INSERT INTO `consultation_requests` VALUES (1,'????','79991112233','Консультация','2026-08-14 20:56:37');
+INSERT INTO `consultation_requests` VALUES (1,'????','79991112233','Консультация','2026-08-14 20:56:37'),(3,'x','79111111111','Консультация','2026-08-14 23:25:01'),(17,'Тестовый пользователь','799999999','Консультация','2026-08-15 00:05:17');
 /*!40000 ALTER TABLE `consultation_requests` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -93,7 +120,7 @@ CREATE TABLE `consultations` (
   `instructor_id` int DEFAULT NULL,
   `image_url` varchar(500) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -123,7 +150,7 @@ CREATE TABLE `course_media` (
   PRIMARY KEY (`id`),
   KEY `course_id` (`course_id`),
   CONSTRAINT `course_media_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=43 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -153,12 +180,13 @@ CREATE TABLE `courses` (
   `image_url` varchar(500) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `instructor_id` int DEFAULT NULL,
+  `views` int NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`),
   KEY `category_id` (`category_id`),
   KEY `fk_course_instructor` (`instructor_id`),
   CONSTRAINT `courses_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `categories` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_course_instructor` FOREIGN KEY (`instructor_id`) REFERENCES `instructors` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=33 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -167,7 +195,7 @@ CREATE TABLE `courses` (
 
 LOCK TABLES `courses` WRITE;
 /*!40000 ALTER TABLE `courses` DISABLE KEYS */;
-INSERT INTO `courses` VALUES (1,1,'Классический массаж с нуля до профи','Полный курс классического массажа: анатомия, базовые приёмы, техники спины и шеи, построение сеанса.',3490.00,'Ирина Соколова','/uploads/course-classic.svg','2026-08-11 11:49:45',1),(2,1,'Лечебный массаж спины и шеи','Как работать с болями в спине и шее: диагностика, глубокие техники, шейно-воротниковая зона.',4990.00,'Сергей Морозов','/uploads/course-spine.svg','2026-08-11 11:49:45',2),(3,2,'Спортивный массаж и восстановление','Разогревающий и восстановительный массаж, работа с крепатурой и травмами у спортсменов.',2990.00,'Алексей Волков','/uploads/course-sport.svg','2026-08-11 11:49:45',3),(4,3,'Тайский массаж: традиционные техники','Давление большим пальцем, стрейчинг и полная последовательность традиционного сеанса.',5490.00,'Ким Сурайя','/uploads/course-thai.svg','2026-08-11 11:49:45',4),(5,4,'Детский массаж для родителей','Массаж и гимнастика для малышей: безопасность, базовые приёмы, игровые техники.',2490.00,'Елена Кузнецова','/uploads/course-kids.svg','2026-08-11 11:49:45',5);
+INSERT INTO `courses` VALUES (1,1,'Классический массаж с нуля до профи','Полный курс классического массажа: анатомия, базовые приёмы, техники спины и шеи, построение сеанса.',3490.00,'Ирина Соколова','/uploads/course-classic.svg','2026-08-11 11:49:45',1,36),(2,1,'Лечебный массаж спины и шеи','Как работать с болями в спине и шее: диагностика, глубокие техники, шейно-воротниковая зона.',4990.00,'Сергей Морозов','/uploads/course-spine.svg','2026-08-11 11:49:45',2,20),(3,2,'Спортивный массаж и восстановление','Разогревающий и восстановительный массаж, работа с крепатурой и травмами у спортсменов.',2990.00,'Алексей Волков','/uploads/course-sport.svg','2026-08-11 11:49:45',3,4),(4,3,'Тайский массаж: традиционные техники','Давление большим пальцем, стрейчинг и полная последовательность традиционного сеанса.',5490.00,'Ким Сурайя','/uploads/course-thai.svg','2026-08-11 11:49:45',4,2),(5,4,'Детский массаж для родителей','Массаж и гимнастика для малышей: безопасность, базовые приёмы, игровые техники.',2490.00,'Елена Кузнецова','/uploads/course-kids.svg','2026-08-11 11:49:45',5,3);
 /*!40000 ALTER TABLE `courses` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -189,7 +217,7 @@ CREATE TABLE `enrollments` (
   KEY `course_id` (`course_id`),
   CONSTRAINT `enrollments_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `enrollments_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=47 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -198,7 +226,6 @@ CREATE TABLE `enrollments` (
 
 LOCK TABLES `enrollments` WRITE;
 /*!40000 ALTER TABLE `enrollments` DISABLE KEYS */;
-INSERT INTO `enrollments` VALUES (3,2,2,0,'2026-08-11 14:13:45');
 /*!40000 ALTER TABLE `enrollments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -219,7 +246,7 @@ CREATE TABLE `instructors` (
   `socials` text,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=21 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -248,7 +275,7 @@ CREATE TABLE `item_images` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_item` (`item_type`,`item_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=67 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -280,7 +307,7 @@ CREATE TABLE `item_reviews` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_user_item` (`user_id`,`item_type`,`item_id`),
   KEY `idx_item` (`item_type`,`item_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=59 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -313,7 +340,7 @@ CREATE TABLE `lessons` (
   PRIMARY KEY (`id`),
   KEY `course_id` (`course_id`),
   CONSTRAINT `lessons_ibfk_1` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=26 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=52 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -327,6 +354,40 @@ INSERT INTO `lessons` VALUES (1,1,'Введение в классический 
 UNLOCK TABLES;
 
 --
+-- Table structure for table `orders`
+--
+
+DROP TABLE IF EXISTS `orders`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `orders` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `user_id` int DEFAULT NULL,
+  `name` varchar(100) NOT NULL,
+  `phone` varchar(30) NOT NULL DEFAULT '',
+  `address` varchar(300) NOT NULL DEFAULT '',
+  `comment` text,
+  `total` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `items` text,
+  `status` varchar(50) NOT NULL DEFAULT 'new',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `orders`
+--
+
+LOCK TABLES `orders` WRITE;
+/*!40000 ALTER TABLE `orders` DISABLE KEYS */;
+INSERT INTO `orders` VALUES (2,NULL,'x','79111111111','','',2490.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":1,\"sum\":2490}]','new','2026-08-14 23:25:01'),(3,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:25:01'),(4,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:26:36'),(5,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:27:15'),(6,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:32:19'),(7,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:32:34'),(8,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:32:54'),(9,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:49:23'),(10,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:49:48'),(11,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:50:17'),(12,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:50:36'),(13,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:51:42'),(14,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:51:53'),(15,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:52:09'),(16,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:52:57'),(17,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:53:03'),(18,NULL,'Покупатель','79111111111','Москва','',4980.00,'[{\"id\":4,\"name\":\"Коврик для тайского массажа\",\"price\":2490,\"qty\":2,\"sum\":4980}]','new','2026-08-14 23:53:09');
+/*!40000 ALTER TABLE `orders` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `payments`
 --
 
@@ -336,7 +397,9 @@ DROP TABLE IF EXISTS `payments`;
 CREATE TABLE `payments` (
   `id` int NOT NULL AUTO_INCREMENT,
   `user_id` int NOT NULL,
-  `course_id` int NOT NULL,
+  `course_id` int DEFAULT NULL,
+  `item_type` enum('course','product','service','consultation','order') NOT NULL DEFAULT 'course',
+  `item_title` varchar(200) NOT NULL DEFAULT '',
   `amount` decimal(10,2) NOT NULL,
   `status` enum('completed') NOT NULL DEFAULT 'completed',
   `method` varchar(50) DEFAULT NULL,
@@ -345,9 +408,8 @@ CREATE TABLE `payments` (
   PRIMARY KEY (`id`),
   KEY `user_id` (`user_id`),
   KEY `course_id` (`course_id`),
-  CONSTRAINT `payments_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `payments_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `payments_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=24 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -356,7 +418,6 @@ CREATE TABLE `payments` (
 
 LOCK TABLES `payments` WRITE;
 /*!40000 ALTER TABLE `payments` DISABLE KEYS */;
-INSERT INTO `payments` VALUES (1,2,1,3490.00,'completed','qr',NULL,'2026-08-11 12:22:27'),(2,2,2,4990.00,'completed','qr',NULL,'2026-08-11 14:13:45');
 /*!40000 ALTER TABLE `payments` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -377,7 +438,7 @@ CREATE TABLE `products` (
   `in_stock` tinyint NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=35 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -409,7 +470,7 @@ CREATE TABLE `reviews` (
   KEY `course_id` (`course_id`),
   CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `reviews_ibfk_2` FOREIGN KEY (`course_id`) REFERENCES `courses` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=14 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -439,7 +500,7 @@ CREATE TABLE `services` (
   `instructor_id` int DEFAULT NULL,
   `image_url` varchar(500) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=8 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -467,7 +528,7 @@ CREATE TABLE `site_reviews` (
   `text` text,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -492,6 +553,7 @@ CREATE TABLE `sms_codes` (
   `session_id` varchar(190) NOT NULL,
   `code` varchar(10) NOT NULL,
   `course_id` int NOT NULL,
+  `item_type` varchar(20) NOT NULL DEFAULT 'course',
   `price` decimal(10,2) NOT NULL,
   `method` varchar(50) DEFAULT NULL,
   `card_last4` varchar(4) DEFAULT NULL,
@@ -500,7 +562,7 @@ CREATE TABLE `sms_codes` (
   PRIMARY KEY (`id`),
   KEY `idx_session` (`session_id`),
   KEY `idx_expiry` (`expires_at_ms`)
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -529,7 +591,7 @@ CREATE TABLE `users` (
   `phone` varchar(30) NOT NULL DEFAULT '',
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=57 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -555,4 +617,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-08-15  0:40:41
+-- Dump completed on 2026-08-15  3:45:56

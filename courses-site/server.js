@@ -14,6 +14,18 @@ const PORT = 3001;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Базовые заголовки безопасности для всех ответов
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' blob: https:; font-src 'self'; frame-src https://www.youtube.com https://www.youtube-nocookie.com; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+  );
+  next();
+});
 // Защитные заголовки для загруженных файлов (до статической раздачи)
 app.use("/uploads", (req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -26,8 +38,50 @@ app.use(session({
   secret: "courses_secret_key_2026",
   resave: false,
   saveUninitialized: false,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 },
+  cookie: {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 1000 * 60 * 60 * 24,
+  },
 }));
+
+// ---- Помощники безопасности ----
+
+// Не раскрываем внутренние детали ошибок (SQL-тексты и т.п.) клиенту
+function serverError(res, err) {
+  console.error("[500]", err);
+  res.status(500).json({ error: "Внутренняя ошибка сервера" });
+}
+
+// Защита от фиксации сессии: новый ID сессии при входе/регистрации
+function regenerateSession(req) {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate(err => (err ? reject(err) : resolve()));
+  });
+}
+
+// Простой in-memory rate limiter (без внешних зависимостей):
+// защищает от перебора паролей/SMS-кодов и спама в заявках/заказах
+const rateBuckets = new Map();
+function rateLimit({ windowMs = 15 * 60 * 1000, max = 100, keyFn } = {}) {
+  return (req, res, next) => {
+    const key = keyFn ? keyFn(req) : req.ip;
+    const now = Date.now();
+    let bucket = rateBuckets.get(key);
+    if (!bucket || now > bucket.resetAt) {
+      bucket = { count: 0, resetAt: now + windowMs };
+      rateBuckets.set(key, bucket);
+    }
+    bucket.count++;
+    if (bucket.count > max) {
+      res.setHeader("Retry-After", Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)));
+      return res.status(429).json({ error: "Слишком много запросов. Попробуйте позже." });
+    }
+    if (rateBuckets.size > 5000) rateBuckets.clear();
+    next();
+  };
+}
 
 // Ожидающие SMS-подтверждения оплаты хранятся в таблице sms_codes (переживают рестарт сервера)
 
@@ -102,7 +156,7 @@ app.get("/api/media/:file", async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", "default-src 'none'");
     res.sendFile(full);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Совместимость: старые ссылки /uploads/<файл> перенаправляются на защищённую раздачу.
@@ -255,7 +309,9 @@ app.get("/api/me", (req, res) => {
   res.json({ user: req.session.user || null });
 });
 
-app.post("/api/register", async (req, res) => {
+app.post("/api/register",
+  rateLimit({ max: 5, keyFn: req => "reg:" + req.ip + ":" + String((req.body && req.body.email) || "").trim().toLowerCase() }),
+  async (req, res) => {
   const { name, email, password, phone } = req.body;
   if (!name || !email || !phone || !password) return res.status(400).json({ error: "Заполните все поля" });
   if (password.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
@@ -272,12 +328,15 @@ app.post("/api/register", async (req, res) => {
       [name, email, phoneDigits, hash]
     );
     const user = { id: result.insertId, name, email, phone: phoneDigits, role: "user" };
+    await regenerateSession(req);
     req.session.user = user;
     res.json({ user });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
-app.post("/api/login", async (req, res) => {
+app.post("/api/login",
+  rateLimit({ max: 10, keyFn: req => "login:" + req.ip + ":" + String((req.body && req.body.email) || "").trim().toLowerCase() }),
+  async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: "Заполните все поля" });
   try {
@@ -286,9 +345,10 @@ app.post("/api/login", async (req, res) => {
     const ok = await bcrypt.compare(password, rows[0].password_hash);
     if (!ok) return res.status(401).json({ error: "Неверный email или пароль" });
     const user = { id: rows[0].id, name: rows[0].name, email: rows[0].email, phone: rows[0].phone || "", role: rows[0].role };
+    await regenerateSession(req);
     req.session.user = user;
     res.json({ user });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/logout", (req, res) => {
@@ -296,7 +356,9 @@ app.post("/api/logout", (req, res) => {
 });
 
 // Восстановление пароля: шаг 1 — запрос SMS-кода на привязанный телефон
-app.post("/api/reset/send", async (req, res) => {
+app.post("/api/reset/send",
+  rateLimit({ max: 5, keyFn: req => "rsend:" + req.ip + ":" + String((req.body && req.body.phone) || "").replace(/\D/g, "") }),
+  async (req, res) => {
   const { phone } = req.body || {};
   const phoneDigits = String(phone || "").replace(/\D/g, "");
   if (!phoneDigits) return res.status(400).json({ error: "Заполните все поля" });
@@ -305,6 +367,9 @@ app.post("/api/reset/send", async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: "Пользователь не найден" });
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAtMs = Date.now() + 5 * 60 * 1000;
+    // Помечаем сессию как изменённую, чтобы express-session сохранил её и
+    // req.session.id остался стабильным для шага подтверждения (saveUninitialized:false)
+    req.session._resetFlow = Date.now();
     await pool.query("DELETE FROM sms_codes WHERE expires_at_ms < ?", [Date.now()]);
     await pool.query("DELETE FROM sms_codes WHERE session_id = ?", [req.session.id]);
     // course_id хранит id пользователя, method='reset' отделяет коды восстановления от оплат
@@ -313,11 +378,13 @@ app.post("/api/reset/send", async (req, res) => {
       [req.session.id, code, rows[0].id, expiresAtMs]
     );
     res.json({ demoCode: code });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Восстановление пароля: шаг 2 — проверка кода и установка нового пароля
-app.post("/api/reset/confirm", async (req, res) => {
+app.post("/api/reset/confirm",
+  rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyFn: req => "rconf:" + req.ip + ":" + String((req.body && req.body.phone) || "").replace(/\D/g, "") }),
+  async (req, res) => {
   const { phone, code, newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
   const phoneDigits = String(phone || "").replace(/\D/g, "");
@@ -341,14 +408,14 @@ app.post("/api/reset/confirm", async (req, res) => {
     await pool.query("UPDATE users SET password_hash = ? WHERE id = ?", [hash, users[0].id]);
     await pool.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/categories", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM categories ORDER BY name");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/courses", async (req, res) => {
@@ -366,7 +433,7 @@ app.get("/api/courses", async (req, res) => {
     const [rows] = categoryId ? await pool.query(q, [categoryId]) : await pool.query(q);
     for (const row of rows) row.instructor_info = instructorInfoRow(row);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/courses/:id", async (req, res) => {
@@ -413,7 +480,7 @@ app.get("/api/courses/:id", async (req, res) => {
       : { id: l.id, title: l.title, position: l.position, duration_min: l.duration_min });
     course.instructor_info = instructorInfoRow(course);
     res.json({ ...course, lessons: parsedLessons, reviews, media, enrolled, progress, isAdmin });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Публичные профили преподавателей (авторов курсов)
@@ -427,7 +494,7 @@ app.get("/api/instructors", async (_req, res) => {
     );
     for (const row of rows) row.socials = parseSocials(row.socials);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/instructors/:id", async (req, res) => {
@@ -458,7 +525,7 @@ app.get("/api/instructors/:id", async (req, res) => {
       ? (reviews.reduce((s, r) => s + Number(r.rating), 0) / reviews.length).toFixed(1)
       : null;
     res.json({ ...instructor, courses, reviews, avg_rating: avg });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Разделы главной страницы: товары, услуги, консультации, отзывы
@@ -466,11 +533,13 @@ app.get("/api/products", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM products ORDER BY category, name");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Оформление заказа из корзины
-app.post("/api/orders", requireAuth, async (req, res) => {
+app.post("/api/orders",
+  rateLimit({ max: 30, keyFn: req => "ord:" + (req.session.user ? req.session.user.id : req.ip) }),
+  requireAuth, async (req, res) => {
   const { name, phone, address, comment, items } = req.body || {};
   const userName = String(name || "").trim() || (req.session.user && req.session.user.name) || "";
   const phoneDigits = String(phone || "").replace(/\D/g, "");
@@ -500,31 +569,33 @@ app.post("/api/orders", requireAuth, async (req, res) => {
       [req.session.user.id, userName, phoneDigits, String(address || "").trim(), String(comment || "").trim(), total, JSON.stringify(lines)]
     );
     res.json({ success: true, orderId: result.insertId, total });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/services", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM services ORDER BY name");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/consultations", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM consultations ORDER BY price");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/site-reviews", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM site_reviews ORDER BY created_at DESC LIMIT 50");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
-app.post("/api/consultations/request", requireAuth, async (req, res) => {
+app.post("/api/consultations/request",
+  rateLimit({ max: 30, keyFn: req => "cons:" + (req.session.user ? req.session.user.id : req.ip) }),
+  requireAuth, async (req, res) => {
   const { name, phone, consultationId } = req.body || {};
   const userName = String(name || "").trim() || (req.session.user && req.session.user.name) || "";
   if (!userName || !phone) return res.status(400).json({ error: "Заполните имя и телефон" });
@@ -536,11 +607,59 @@ app.post("/api/consultations/request", requireAuth, async (req, res) => {
       [userName, String(phone).replace(/\D/g, ""), subject]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Детальные страницы разделов: товары, услуги, консультации
 const ITEM_TYPES = { product: "products", service: "services", consultation: "consultations" };
+
+// Типы оплачиваемых покупок: курсы, товары, услуги, консультации (через записи), заказы из корзины
+const PAY_TYPES = { course: "courses", product: "products", service: "bookings", consultation: "bookings", order: "orders" };
+const PAY_TITLE_COL = { course: "title", product: "name" };
+
+function safeJson(s, fallback) {
+  try { return JSON.parse(s); } catch { return fallback; }
+}
+
+// Возвращает { title, price } для оплачиваемой записи или null.
+// Для услуг/консультаций itemId — это id записи (booking), для заказов — id заказа (только своего).
+async function resolvePayable(itemType, itemId, userId) {
+  const type = String(itemType || "").trim();
+  if (type === "service" || type === "consultation") {
+    const [rows] = await pool.query(
+      "SELECT id, title, price FROM bookings WHERE id = ? AND user_id = ?",
+      [Number(itemId), Number(userId)]
+    );
+    if (!rows.length) return null;
+    return { title: rows[0].title, price: Number(rows[0].price) || 0 };
+  }
+  if (type === "order") {
+    const [rows] = await pool.query(
+      "SELECT id, total, items FROM orders WHERE id = ? AND user_id = ?",
+      [Number(itemId), Number(userId)]
+    );
+    if (!rows.length) return null;
+    const count = safeJson(rows[0].items, []).length;
+    return { title: `Заказ №${rows[0].id}${count ? ` (${count} поз.)` : ""}`, price: Number(rows[0].total) || 0 };
+  }
+  const table = PAY_TYPES[type];
+  const titleCol = PAY_TITLE_COL[type];
+  if (!table || !titleCol) return null;
+  const [rows] = await pool.query(`SELECT ${titleCol} AS title, price FROM ${table} WHERE id = ?`, [Number(itemId)]);
+  if (!rows.length) return null;
+  return { title: rows[0].title, price: Number(rows[0].price) || 0 };
+}
+
+// Нормализация запроса на оплату: поддерживается и старый формат {courseId, payment},
+// и новый {itemType, itemId, payment}. Возвращает { type, id } или null.
+function parsePayTarget(body) {
+  const bodyObj = body || {};
+  const type = String(bodyObj.itemType || (bodyObj.courseId ? "course" : "") || "").trim();
+  const rawId = bodyObj.itemId != null ? bodyObj.itemId : bodyObj.courseId;
+  const id = Number(rawId);
+  if (!type || !Number.isFinite(id) || id <= 0) return null;
+  return { type, id };
+}
 
 app.get("/api/items/:type/:id", async (req, res) => {
   const table = ITEM_TYPES[req.params.type];
@@ -572,7 +691,7 @@ app.get("/api/items/:type/:id", async (req, res) => {
     }
     item.images = images.length ? images.map(i => i.url) : (item.image_url ? [item.image_url] : []);
     res.json({ ...item, reviews, avg_rating: avg, instructor_info, item_type: req.params.type });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/items/:type/:id/review", requireAuth, async (req, res) => {
@@ -592,7 +711,7 @@ app.post("/api/items/:type/:id/review", requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     if (err.code === "ER_DUP_ENTRY") return res.status(400).json({ error: "Отзыв уже оставлен" });
-    res.status(500).json({ error: err.message });
+    serverError(res, err);
   }
 });
 
@@ -611,47 +730,58 @@ app.post("/api/courses/:id/enroll", requireAuth, async (req, res) => {
       [req.session.user.id, req.params.id]
     );
     res.json({ success: true, paid: false });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Шаг 1: запрос SMS-кода для оплаты. Возвращает демо-QR-код (сканируется банковским
 // приложением или камерой) — данные карты на сайт не вводятся.
-app.post("/api/payment/sms-send", requireAuth, async (req, res) => {
-  const { courseId, payment } = req.body || {};
-  if (!courseId || !payment || !payment.method) return res.status(400).json({ error: "Заполните данные оплаты" });
+// Поддерживаются все типы покупок: course / product / service / consultation / order.
+app.post("/api/payment/sms-send",
+  rateLimit({ max: 30, keyFn: req => "sms_send:" + (req.session.user ? req.session.user.id : req.ip) }),
+  requireAuth, async (req, res) => {
+  const { payment } = req.body || {};
+  const target = parsePayTarget(req.body);
+  if (!target || !payment || !payment.method) return res.status(400).json({ error: "Заполните данные оплаты" });
   try {
-    const [courses] = await pool.query("SELECT id, title, price FROM courses WHERE id = ?", [courseId]);
-    if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
-    const price = Number(courses[0].price) || 0;
-    if (price <= 0) return res.status(400).json({ error: "Курс бесплатный, оплата не требуется" });
+    const info = await resolvePayable(target.type, target.id, req.session.user.id);
+    if (!info) return res.status(404).json({ error: "Запись не найдена" });
+    const price = info.price;
+    if (price <= 0) return res.status(400).json({ error: "Бесплатно, оплата не требуется" });
 
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAtMs = Date.now() + 5 * 60 * 1000;
     await pool.query("DELETE FROM sms_codes WHERE expires_at_ms < ?", [Date.now()]);
     await pool.query("DELETE FROM sms_codes WHERE session_id = ?", [req.session.id]);
     await pool.query(
-      "INSERT INTO sms_codes (session_id, code, course_id, price, method, card_last4, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [req.session.id, code, Number(courseId), price, payment.method || "qr", null, expiresAtMs]
+      "INSERT INTO sms_codes (session_id, code, course_id, item_type, price, method, card_last4, expires_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [req.session.id, code, target.id, target.type, price, payment.method || "qr", null, expiresAtMs]
     );
     // Демо: QR-код кодирует платёжную ссылку. В реальном проекте здесь платёжный
     // шлюз (СБП/ЮKassa), а код приходит на телефон клиента реальным SMS.
-    const qrData = `https://sbp.demo/pay/courses/${Number(courseId)}?sum=${price}&title=${encodeURIComponent(courses[0].title)}`;
+    const qrData = `https://sbp.demo/pay/${target.type}/${target.id}?sum=${price}&title=${encodeURIComponent(info.title)}`;
     const qrImage = await QRCode.toDataURL(qrData, { width: 260, margin: 1, errorCorrectionLevel: "M" });
     res.json({ demoCode: code, qrData, qrImage });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
-// Шаг 2: подтверждение SMS-кода и завершение оплаты
-app.post("/api/payment/sms-confirm", requireAuth, async (req, res) => {
-  const { courseId, code } = req.body || {};
+// Шаг 2: подтверждение SMS-кода и завершение оплаты.
+// В зависимости от типа покупки: запись на курс (enrollment), запись на услугу/консультацию,
+// оплата заказа из корзины или покупка товара напрямую.
+app.post("/api/payment/sms-confirm",
+  rateLimit({ max: 15, keyFn: req => "sms_confirm:" + (req.session.user ? req.session.user.id : req.ip) }),
+  requireAuth, async (req, res) => {
+  const { code } = req.body || {};
+  const target = parsePayTarget(req.body);
+  if (!target) return res.status(400).json({ error: "Сначала запросите SMS-код" });
   let entry;
   try {
-    const [rows] = await pool.query("SELECT * FROM sms_codes WHERE session_id = ?", [req.session.id]);
+    const [rows] = await pool.query(
+      "SELECT * FROM sms_codes WHERE session_id = ? AND item_type = ? AND course_id = ?",
+      [req.session.id, target.type, target.id]
+    );
     entry = rows[0];
-  } catch (err) { return res.status(500).json({ error: err.message }); }
-  if (!entry || Number(entry.course_id) !== Number(courseId)) {
-    return res.status(400).json({ error: "Сначала запросите SMS-код" });
-  }
+  } catch (err) { return serverError(res, err); }
+  if (!entry) return res.status(400).json({ error: "Сначала запросите SMS-код" });
   if (Date.now() > Number(entry.expires_at_ms)) {
     await pool.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
     return res.status(400).json({ error: "Код истёк. Запросите новый." });
@@ -663,58 +793,122 @@ app.post("/api/payment/sms-confirm", requireAuth, async (req, res) => {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const info = await resolvePayable(entry.item_type, entry.course_id, req.session.user.id);
     await conn.query(
-      "INSERT INTO payments (user_id, course_id, amount, status, method, card_last4) VALUES (?, ?, ?, 'completed', ?, ?)",
-      [req.session.user.id, entry.course_id, entry.price, entry.method, entry.card_last4]
+      "INSERT INTO payments (user_id, course_id, item_type, item_title, amount, status, method, card_last4) VALUES (?, ?, ?, ?, ?, 'completed', ?, ?)",
+      [req.session.user.id, entry.course_id, entry.item_type, info ? info.title : "Покупка", entry.price, entry.method, entry.card_last4]
     );
-    await conn.query(
-      "INSERT IGNORE INTO enrollments (user_id, course_id) VALUES (?, ?)",
-      [req.session.user.id, entry.course_id]
-    );
+    if (entry.item_type === "course") {
+      await conn.query(
+        "INSERT IGNORE INTO enrollments (user_id, course_id) VALUES (?, ?)",
+        [req.session.user.id, entry.course_id]
+      );
+    } else if (entry.item_type === "service" || entry.item_type === "consultation") {
+      await conn.query(
+        "UPDATE bookings SET status = 'paid', method = ? WHERE id = ? AND user_id = ? AND status = 'new'",
+        [entry.method, entry.course_id, req.session.user.id]
+      );
+    } else if (entry.item_type === "product") {
+      // Прямая покупка товара со страницы товара: фиксируем её и как заказ
+      const lines = [{ id: Number(entry.course_id), name: info ? info.title : "Товар", price: Number(entry.price), qty: 1, sum: Number(entry.price) }];
+      await conn.query(
+        "INSERT INTO orders (user_id, name, phone, address, comment, total, items, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'paid')",
+        [req.session.user.id, req.session.user.name || "Покупатель", req.session.user.phone || "", "", "Оплачено через сайт", entry.price, JSON.stringify(lines)]
+      );
+    } else if (entry.item_type === "order") {
+      await conn.query(
+        "UPDATE orders SET status = 'paid' WHERE id = ? AND user_id = ?",
+        [entry.course_id, req.session.user.id]
+      );
+    }
     await conn.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
     await conn.commit();
     res.json({ success: true, paid: true });
   } catch (err) {
     await conn.rollback();
-    res.status(500).json({ error: err.message });
+    serverError(res, err);
   } finally { conn.release(); }
 });
 
 app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at,
-         c.title AS course_title, u.name AS user_name
+      `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at, p.item_type, p.item_title,
+         u.name AS user_name
        FROM payments p
-       JOIN courses c ON p.course_id = c.id
        JOIN users u ON p.user_id = u.id
        ORDER BY p.created_at DESC`
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/payments/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM payments WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
-// Мои платежи (история оплат пользователя)
+// Мои платежи (история оплат пользователя: курсы, товары, услуги, консультации)
 app.get("/api/my/payments", requireAuth, async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at,
-         c.title AS course_title
+      `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at, p.item_type, p.item_title, p.course_id AS item_id
        FROM payments p
-       JOIN courses c ON p.course_id = c.id
        WHERE p.user_id = ?
        ORDER BY p.created_at DESC`,
       [req.session.user.id]
     );
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
+});
+
+// Мои покупки: оплаченные заказы товаров и записи на услуги/консультации
+app.get("/api/my/purchases", requireAuth, async (req, res) => {
+  try {
+    const [orders] = await pool.query(
+      `SELECT id, total, items, status, created_at FROM orders
+       WHERE user_id = ? AND status = 'paid' ORDER BY created_at DESC`,
+      [req.session.user.id]
+    );
+    const [bookings] = await pool.query(
+      `SELECT id, item_type, item_id, title, price, method, status, booking_date, booking_time, note, created_at
+       FROM bookings WHERE user_id = ? AND status = 'paid' ORDER BY created_at DESC`,
+      [req.session.user.id]
+    );
+    res.json({
+      orders: orders.map(o => ({ ...o, items: safeJson(o.items, []) })),
+      bookings,
+    });
+  } catch (err) { serverError(res, err); }
+});
+
+// Запись на услугу или консультацию (создаёт бронь со статусом 'new', оплата — через SMS)
+app.post("/api/items/:type/:id/book",
+  rateLimit({ max: 30, keyFn: req => "book:" + (req.session.user ? req.session.user.id : req.ip) }),
+  requireAuth, async (req, res) => {
+  const { type, id } = req.params;
+  if (type !== "service" && type !== "consultation") {
+    return res.status(400).json({ error: "Запись на эту позицию недоступна" });
+  }
+  const { date, time, comment } = req.body || {};
+  try {
+    const table = ITEM_TYPES[type];
+    const [rows] = await pool.query(
+      type === "consultation" ? "SELECT id, title, price FROM consultations WHERE id = ?"
+                              : "SELECT id, name, price FROM services WHERE id = ?",
+      [Number(id)]
+    );
+    if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
+    const row = rows[0];
+    const title = type === "consultation" ? row.title : row.name;
+    const [result] = await pool.query(
+      "INSERT INTO bookings (user_id, item_type, item_id, title, price, status, booking_date, booking_time, note) VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?)",
+      [req.session.user.id, type, Number(id), title, Number(row.price) || 0, String(date || "").trim(), String(time || "").trim(), String(comment || "").trim()]
+    );
+    res.json({ success: true, bookingId: result.insertId });
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/courses/:id/progress", requireAuth, async (req, res) => {
@@ -735,7 +929,7 @@ app.post("/api/courses/:id/progress", requireAuth, async (req, res) => {
       [progress, req.session.user.id, req.params.id]
     );
     res.json({ progress });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/courses/:id/review", requireAuth, async (req, res) => {
@@ -753,7 +947,7 @@ app.post("/api/courses/:id/review", requireAuth, async (req, res) => {
       [req.session.user.id, req.params.id, Math.max(1, Math.min(5, Number(rating) || 5)), comment || ""]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/my", requireAuth, async (req, res) => {
@@ -768,7 +962,7 @@ app.get("/api/my", requireAuth, async (req, res) => {
     );
     for (const row of rows) row.instructor_info = instructorInfoRow(row);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 const CERT_FONT = "C:/Windows/Fonts/arial.ttf";
@@ -829,7 +1023,7 @@ app.get("/api/certificate/:courseId", requireAuth, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="certificate-${req.params.courseId}.pdf"`);
     res.send(pdf);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.get("/api/admin/users", requireAdmin, async (_req, res) => {
@@ -850,7 +1044,7 @@ app.get("/api/admin/users", requireAdmin, async (_req, res) => {
     }
     for (const u of rows) u.courses = byUser[u.id] || [];
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/users", requireAdmin, async (req, res) => {
@@ -866,7 +1060,7 @@ app.post("/api/admin/users", requireAdmin, async (req, res) => {
       [String(name).trim(), String(email).trim(), String(phone || "").replace(/\D/g, ""), hash, role === "admin" ? "admin" : "user"]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/users/:id/courses/:courseId", requireAdmin, async (req, res) => {
@@ -878,7 +1072,7 @@ app.delete("/api/admin/users/:id/courses/:courseId", requireAdmin, async (req, r
     if (!r.affectedRows) return res.status(404).json({ error: "Запись не найдена" });
     await pool.query("DELETE FROM reviews WHERE user_id = ? AND course_id = ?", [req.params.id, req.params.courseId]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Ручное зачисление пользователя на курс без оплаты (например, при личной оплате).
@@ -895,7 +1089,7 @@ app.post("/api/admin/users/:id/courses", requireAdmin, async (req, res) => {
       [req.params.id, Number(courseId)]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
@@ -913,7 +1107,7 @@ app.post("/api/admin/users/:id/role", requireAdmin, async (req, res) => {
     }
     await pool.query("UPDATE users SET role = ? WHERE id = ?", [role, req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
@@ -929,7 +1123,7 @@ app.delete("/api/admin/users/:id", requireAdmin, async (req, res) => {
     }
     await pool.query("DELETE FROM users WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/categories", requireAdmin, async (req, res) => {
@@ -938,14 +1132,14 @@ app.post("/api/admin/categories", requireAdmin, async (req, res) => {
   try {
     await pool.query("INSERT INTO categories (name, description) VALUES (?, ?)", [name, description || ""]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/categories/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM categories WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/courses", requireAdmin, async (req, res) => {
@@ -957,7 +1151,7 @@ app.post("/api/admin/courses", requireAdmin, async (req, res) => {
       [title, description || "", price || 0, category_id || null, instructor || "", instructor_id || null, image_url || ""]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.put("/api/admin/courses/:id", requireAdmin, async (req, res) => {
@@ -969,7 +1163,7 @@ app.put("/api/admin/courses/:id", requireAdmin, async (req, res) => {
       [title, description || "", price || 0, category_id || null, instructor || "", instructor_id || null, image_url || "", req.params.id]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // Управление профилями преподавателей
@@ -982,7 +1176,7 @@ app.get("/api/admin/instructors", requireAdmin, async (_req, res) => {
     );
     for (const row of rows) row.socials = parseSocials(row.socials);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/instructors", requireAdmin, async (req, res) => {
@@ -994,7 +1188,7 @@ app.post("/api/admin/instructors", requireAdmin, async (req, res) => {
       [String(name).trim(), specialty || "", bio || "", experience || "", avatar || "", socialsToDb(socials)]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.put("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
@@ -1008,7 +1202,7 @@ app.put("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
       [String(name).trim(), specialty || "", bio || "", experience || "", avatar || "", socialsToDb(socials), req.params.id]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
@@ -1018,7 +1212,7 @@ app.delete("/api/admin/instructors/:id", requireAdmin, async (req, res) => {
     await pool.query("UPDATE courses SET instructor_id = NULL WHERE instructor_id = ?", [req.params.id]);
     await pool.query("DELETE FROM instructors WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // ============ АДМИН: ТОВАРЫ / УСЛУГИ / КОНСУЛЬТАЦИИ ============
@@ -1039,7 +1233,7 @@ function registerItemAdmin(type, table) {
       );
       for (const row of rows) row.images = parseItemImages(row.images_str);
       res.json(rows);
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { serverError(res, err); }
   });
 
   app.post(`/api/admin/${type}s`, requireAdmin, async (req, res) => {
@@ -1066,7 +1260,7 @@ function registerItemAdmin(type, table) {
         );
       }
       res.json({ success: true, id: result.insertId });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { serverError(res, err); }
   });
 
   app.put(`/api/admin/${type}s/:id`, requireAdmin, async (req, res) => {
@@ -1094,7 +1288,7 @@ function registerItemAdmin(type, table) {
         );
       }
       res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { serverError(res, err); }
   });
 
   app.delete(`/api/admin/${type}s/:id`, requireAdmin, async (req, res) => {
@@ -1105,7 +1299,7 @@ function registerItemAdmin(type, table) {
       await pool.query("DELETE FROM item_reviews WHERE item_type = ? AND item_id = ?", [type, req.params.id]);
       await pool.query(`DELETE FROM ${table} WHERE id = ?`, [req.params.id]);
       res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { serverError(res, err); }
   });
 
   app.post(`/api/admin/${type}s/:id/images`, requireAdmin, async (req, res) => {
@@ -1123,7 +1317,7 @@ function registerItemAdmin(type, table) {
         [type, req.params.id, String(url).trim(), Number(mx[0].m) + 1]
       );
       res.json({ success: true });
-    } catch (err) { res.status(500).json({ error: err.message }); }
+    } catch (err) { serverError(res, err); }
   });
 }
 
@@ -1140,7 +1334,7 @@ app.delete("/api/admin/item-images/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM item_images WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 registerItemAdmin("product", "products");
@@ -1152,7 +1346,7 @@ app.get("/api/admin/site-reviews", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM site_reviews ORDER BY id DESC");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/site-reviews", requireAdmin, async (req, res) => {
@@ -1165,14 +1359,14 @@ app.post("/api/admin/site-reviews", requireAdmin, async (req, res) => {
       [String(author).trim(), role || "", Math.min(5, Math.max(1, Number(rating) || 5)), String(text).trim()]
     );
     res.json({ success: true, id: result.insertId });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/site-reviews/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM site_reviews WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 // ============ АДМИН: ЗАЯВКИ ============
@@ -1180,21 +1374,41 @@ app.get("/api/admin/requests", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM consultation_requests ORDER BY created_at DESC");
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/requests/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM consultation_requests WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
+});
+
+// ============ АДМИН: ЗАПИСИ НА УСЛУГИ И КОНСУЛЬТАЦИИ ============
+app.get("/api/admin/bookings", requireAdmin, async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT b.id, b.item_type, b.item_id, b.title, b.price, b.method, b.status,
+         b.booking_date, b.booking_time, b.note, b.created_at, u.name AS user_name, u.phone AS user_phone
+       FROM bookings b JOIN users u ON u.id = b.user_id
+       ORDER BY b.created_at DESC`
+    );
+    res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+app.delete("/api/admin/bookings/:id", requireAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM bookings WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/courses/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM courses WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/courses/:id/lessons", requireAdmin, async (req, res) => {
@@ -1208,14 +1422,14 @@ app.post("/api/admin/courses/:id/lessons", requireAdmin, async (req, res) => {
       [req.params.id, title, content || "", duration_min || 0, pos, video_url || "", image_url || "", quiz || null]
     );
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM lessons WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.post("/api/admin/courses/:id/media", requireAdmin, async (req, res) => {
@@ -1230,14 +1444,14 @@ app.post("/api/admin/courses/:id/media", requireAdmin, async (req, res) => {
       [req.params.id, type, url, pos]
     );
     res.json({ success: true, type });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 app.delete("/api/admin/media/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM course_media WHERE id = ?", [req.params.id]);
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { serverError(res, err); }
 });
 
 async function seed() {

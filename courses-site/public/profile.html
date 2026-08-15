@@ -17,9 +17,11 @@
     <h1 class="page-title" data-i18n="myCourses">Мои курсы</h1>
     <div class="profile-tabs">
       <button class="profile-tab active" data-tab="courses" data-i18n="myCourses">Мои курсы</button>
+      <button class="profile-tab" data-tab="purchases" data-i18n="myPurchases">Мои покупки</button>
       <button class="profile-tab" data-tab="payments" data-i18n="myPayments">Мои платежи</button>
     </div>
     <div id="tab-courses"><div class="loading">Загрузка...</div></div>
+    <div id="tab-purchases" style="display:none"></div>
     <div id="tab-payments" style="display:none"></div>
   </div>
 
@@ -83,7 +85,7 @@
               ${rows.map(p => `
                 <tr>
                   <td>${new Date(p.created_at).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US")}</td>
-                  <td>${escapeHtml(p.course_title)}</td>
+                  <td>${escapeHtml(p.item_title)}</td>
                   <td class="pay-method">${escapeHtml((p.method || "").toUpperCase())}</td>
                   <td class="pay-amount">${fmtPrice(p.amount)}</td>
                 </tr>`).join("")}
@@ -92,13 +94,56 @@
         </div>`;
     }
 
+    async function loadPurchases() {
+      const container = document.getElementById("tab-purchases");
+      const me = await fetchMe();
+      if (!me) {
+        container.innerHTML = `<div class="empty">${t("loginToSee")}</div>`;
+        return;
+      }
+      let data;
+      try { data = await apiFetch("/api/my/purchases"); }
+      catch (err) { container.innerHTML = `<div class="empty">${escapeHtml(err.message)}</div>`; return; }
+      const orders = data.orders || [];
+      const bookings = data.bookings || [];
+      if (!orders.length && !bookings.length) {
+        container.innerHTML = `<div class="empty">${t("noPurchasesYet")}<br><a href="products.html" style="color:var(--accent)">${t("toProducts")}</a></div>`;
+        return;
+      }
+      const date = s => new Date(s + (s && s.length === 10 ? "T00:00:00" : "")).toLocaleDateString(lang === "ru" ? "ru-RU" : "en-US");
+      const orderCards = orders.map(o => `
+        <div class="my-card">
+          <div style="flex:1">
+            <div class="mc-title">${t("orderWord")} №${o.id} <span class="badge-stock in" style="font-size:11px;vertical-align:2px">${t("statusPaid")}</span></div>
+            <div class="mc-meta">${(o.items || []).map(i => `${escapeHtml(i.name)} × ${i.qty} — ${fmtPrice(i.sum)}`).join("; ")}</div>
+            <div class="mc-meta">${fmtPrice(o.total)} · ${date(o.created_at)}</div>
+          </div>
+        </div>`).join("");
+      const bookingCards = bookings.map(b => `
+        <div class="my-card">
+          <div style="flex:1">
+            <div class="mc-title">${b.item_type === "consultation" ? "📞" : "💆"} ${escapeHtml(b.title)} <span class="badge-stock in" style="font-size:11px;vertical-align:2px">${t("statusPaid")}</span></div>
+            <div class="mc-meta">${b.booking_date ? date(b.booking_date) : "—"}${b.booking_time ? " · " + escapeHtml(b.booking_time) : ""}</div>
+            <div class="mc-meta">${fmtPrice(b.price)}${b.note ? " · " + escapeHtml(b.note) : ""}</div>
+          </div>
+        </div>`).join("");
+      container.innerHTML = `
+        ${orders.length ? `<h3 style="margin:16px 0 8px">${t("ordersWord")}</h3>${orderCards}` : ""}
+        ${bookings.length ? `<h3 style="margin:16px 0 8px">${t("bookingsWord")}</h3>${bookingCards}` : ""}`;
+    }
+
     function wireTabs() {
       document.querySelectorAll(".profile-tab").forEach(btn => {
         btn.addEventListener("click", () => {
           document.querySelectorAll(".profile-tab").forEach(b => b.classList.toggle("active", b === btn));
           const tab = btn.dataset.tab;
           document.getElementById("tab-courses").style.display = tab === "courses" ? "block" : "none";
+          document.getElementById("tab-purchases").style.display = tab === "purchases" ? "block" : "none";
           document.getElementById("tab-payments").style.display = tab === "payments" ? "block" : "none";
+          if (tab === "purchases" && !document.getElementById("tab-purchases").dataset.loaded) {
+            document.getElementById("tab-purchases").dataset.loaded = "1";
+            loadPurchases();
+          }
           if (tab === "payments" && !document.getElementById("tab-payments").dataset.loaded) {
             document.getElementById("tab-payments").dataset.loaded = "1";
             loadPayments();

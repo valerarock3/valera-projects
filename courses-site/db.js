@@ -144,16 +144,48 @@ async function initSchema() {
       CREATE TABLE IF NOT EXISTS payments (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
-        course_id INT NOT NULL,
+        course_id INT NULL,
+        item_type ENUM('course','product','service','consultation','order') NOT NULL DEFAULT 'course',
+        item_title VARCHAR(200) NOT NULL DEFAULT '',
         amount DECIMAL(10,2) NOT NULL,
         status ENUM('completed') NOT NULL DEFAULT 'completed',
         method VARCHAR(50),
         card_last4 VARCHAR(4),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // Обобщение таблицы payments под все типы покупок (курсы, товары, услуги, консультации).
+    // course_id становится общим item_id, привязка к courses убирается.
+    const [payCols] = await conn.query("SHOW COLUMNS FROM payments");
+    const payColNames = payCols.map(c => c.Field);
+    if (!payColNames.includes("item_type")) {
+      await conn.query(
+        "ALTER TABLE payments ADD COLUMN item_type ENUM('course','product','service','consultation','order') NOT NULL DEFAULT 'course' AFTER course_id"
+      );
+    }
+    if (!payColNames.includes("item_title")) {
+      await conn.query("ALTER TABLE payments ADD COLUMN item_title VARCHAR(200) NOT NULL DEFAULT '' AFTER item_type");
+    }
+    const [payFk] = await conn.query(
+      `SELECT constraint_name FROM information_schema.KEY_COLUMN_USAGE
+       WHERE table_schema = DATABASE() AND table_name = 'payments' AND column_name = 'course_id' AND referenced_table_name IS NOT NULL`
+    );
+    const fkName = payFk[0] && (payFk[0].constraint_name || payFk[0].CONSTRAINT_NAME);
+    if (fkName) {
+      try {
+        await conn.query(`ALTER TABLE payments DROP FOREIGN KEY ${fkName}`);
+      } catch (e) {
+        console.error("[db] Не удалось снять FK payments.course_id:", e.message);
+      }
+    }
+    await conn.query("ALTER TABLE payments MODIFY course_id INT NULL");
+    await conn.query(
+      `UPDATE payments p LEFT JOIN courses c ON c.id = p.course_id
+       SET p.item_title = COALESCE(c.title, CONCAT('Позиция #', p.course_id))
+       WHERE p.item_title = ''`
+    );
 
     await conn.query(`
       CREATE TABLE IF NOT EXISTS sms_codes (
@@ -161,6 +193,7 @@ async function initSchema() {
         session_id VARCHAR(190) NOT NULL,
         code VARCHAR(10) NOT NULL,
         course_id INT NOT NULL,
+        item_type VARCHAR(20) NOT NULL DEFAULT 'course',
         price DECIMAL(10,2) NOT NULL,
         method VARCHAR(50),
         card_last4 VARCHAR(4),
@@ -168,6 +201,30 @@ async function initSchema() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         KEY idx_session (session_id),
         KEY idx_expiry (expires_at_ms)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    const [smsCols] = await conn.query("SHOW COLUMNS FROM sms_codes");
+    if (!smsCols.map(c => c.Field).includes("item_type")) {
+      await conn.query("ALTER TABLE sms_codes ADD COLUMN item_type VARCHAR(20) NOT NULL DEFAULT 'course' AFTER course_id");
+    }
+
+    // Записи на услуги и консультации
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS bookings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        item_type ENUM('service','consultation') NOT NULL,
+        item_id INT NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        price DECIMAL(10,2) NOT NULL DEFAULT 0,
+        method VARCHAR(50) NOT NULL DEFAULT '',
+        status ENUM('new','paid','cancelled') NOT NULL DEFAULT 'new',
+        booking_date VARCHAR(20) NOT NULL DEFAULT '',
+        booking_time VARCHAR(20) NOT NULL DEFAULT '',
+        note VARCHAR(500) NOT NULL DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 

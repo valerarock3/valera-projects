@@ -277,6 +277,7 @@ function translateError(msg) {
     "Требуется подтверждение оплаты по SMS": t("smsRequired"),
     "Заполните данные оплаты": t("smsFillPay"),
     "Курс бесплатный, оплата не требуется": t("smsCourseFree"),
+    "Бесплатно, оплата не требуется": t("smsCourseFree"),
     "Сначала запросите SMS-код": t("smsFirstRequest"),
     "Код истёк. Запросите новый.": t("smsExpired"),
     "Неверный SMS-код": t("smsWrong"),
@@ -295,8 +296,116 @@ function translateError(msg) {
     "Недопустимый тип файла": t("badFileType"),
     "Файл не найден": t("fileNotFound"),
     "Файл не загружен": t("fileNotUploaded"),
+    "Запись не найдена": t("itemNotFound"),
+    "Запись на эту позицию недоступна": t("bookNotAvailable"),
+    "Заполните имя и телефон": t("fillNamePhone"),
   };
   return map[msg] || msg;
+}
+
+// ===== Общее модальное окно оплаты (QR + SMS) для товаров, услуг, консультаций и заказов =====
+function openPayModal({ itemType, itemId, title, price, onSuccess }) {
+  const close = () => overlay.remove();
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>${t("payTitle")}</h3>
+      <div class="pay-body">
+        <div class="pay-summary">
+          <div class="ps-row"><span class="ps-label">${t("payItem")}</span><span>${escapeHtml(title || "")}</span></div>
+          <div class="ps-row"><span class="ps-label">${t("payAmount")}</span></div>
+          <div class="ps-amount">${fmtPrice(price)}</div>
+        </div>
+        <div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text">${t("payQrGenerating")}</div></div>
+      </div>
+    </div>`;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  const body = overlay.querySelector(".pay-body");
+
+  const payRequest = () => apiFetch("/api/payment/sms-send", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ itemType, itemId, payment: { method: "qr" } }),
+  });
+
+  async function startQr() {
+    try {
+      const res = await payRequest();
+      body.innerHTML = `
+        <div class="pay-summary">
+          <div class="ps-row"><span class="ps-label">${t("payItem")}</span><span>${escapeHtml(title || "")}</span></div>
+          <div class="ps-row"><span class="ps-label">${t("payAmount")}</span></div>
+          <div class="ps-amount">${fmtPrice(price)}</div>
+        </div>
+        <div class="qr-box">
+          <img class="qr-img" src="${res.qrImage}" alt="QR">
+          <div class="qr-text">${t("payQrText")}</div>
+        </div>
+        <button class="btn btn-primary" id="qr-paid-btn" style="width:100%">${t("payQrPaid")}</button>
+        <div class="secure-note">${t("paySecure")}</div>
+      `;
+      body.querySelector("#qr-paid-btn").addEventListener("click", () => showSms(res.demoCode));
+    } catch (err) {
+      body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${escapeHtml(err.message)}</div></div>`;
+      setTimeout(close, 2000);
+    }
+  }
+
+  function showSms(demoCode) {
+    body.innerHTML = `
+      <div class="pay-summary">
+        <div class="ps-row"><span class="ps-label">${t("payItem")}</span><span>${escapeHtml(title || "")}</span></div>
+        <div class="ps-row"><span class="ps-label">${t("payAmount")}</span></div>
+        <div class="ps-amount">${fmtPrice(price)}</div>
+      </div>
+      <div class="sms-notice">${t("smsSent")}</div>
+      <div class="demo-code-box">${t("smsDemoCode")}: <b>${demoCode}</b></div>
+      <div class="form-group full">
+        <label>${t("smsCodeLabel")}</label>
+        <input id="sms-code" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+      </div>
+      <button class="btn btn-primary" id="sms-btn" style="width:100%">${t("smsConfirmBtn")}</button>
+      <button class="btn btn-outline" id="sms-resend" style="width:100%;margin-top:8px">${t("smsResend")}</button>
+    `;
+    const input = body.querySelector("#sms-code");
+    input.focus();
+    wireInputGuards();
+    input.addEventListener("input", () => {
+      input.value = input.value.replace(/\D/g, "").slice(0, 6);
+      if (input.value.length === 6) body.querySelector("#sms-btn").click();
+    });
+    body.querySelector("#sms-btn").addEventListener("click", () => confirmSms(input.value));
+    body.querySelector("#sms-resend").addEventListener("click", async () => {
+      try {
+        const res = await payRequest();
+        body.querySelector(".demo-code-box b").textContent = res.demoCode;
+        alert(t("smsResent"));
+      } catch (err) { alert(err.message); }
+    });
+  }
+
+  async function confirmSms(code) {
+    if (!/^\d{6}$/.test(code)) { alert(t("smsCodeInvalid")); return; }
+    body.innerHTML = `<div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text">${t("payProcessing")}</div></div>`;
+    try {
+      await apiFetch("/api/payment/sms-confirm", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemType, itemId, code }),
+      });
+      body.innerHTML = `<div class="pay-status"><div class="ps-icon">✅</div><div class="ps-text">${t("paySuccess")}</div></div>`;
+      setTimeout(() => {
+        close();
+        if (onSuccess) onSuccess();
+      }, 1200);
+    } catch (err) {
+      body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${escapeHtml(err.message)}</div></div>`;
+      setTimeout(close, 2000);
+    }
+  }
+
+  startQr();
+  return overlay;
 }
 
 function injectFooter() {
@@ -333,7 +442,101 @@ function injectFooter() {
   document.body.appendChild(footer);
 }
 
+// ===== Валидация и маски полей ввода =====
+function guardDigits(el, max) {
+  el.maxLength = max;
+  el.addEventListener("input", () => {
+    const d = el.value.replace(/\D/g, "").slice(0, max);
+    if (el.value !== d) el.value = d;
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key.length > 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!/\d/.test(e.key)) e.preventDefault();
+  });
+}
+
+function guardPhone(el) {
+  guardDigits(el, 11);
+}
+
+function guardName(el) {
+  el.maxLength = 50;
+  el.addEventListener("input", () => {
+    const v = el.value.replace(/[^A-Za-zА-Яа-яЁё\s\-'.]/g, "");
+    if (el.value !== v) el.value = v;
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key.length > 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!/^[A-Za-zА-Яа-яЁё\s\-'.]$/.test(e.key)) e.preventDefault();
+  });
+}
+
+function guardEmail(el) {
+  el.maxLength = 190;
+  el.addEventListener("input", () => {
+    const v = el.value.replace(/[^A-Za-z0-9@._%+\-]/g, "");
+    if (el.value !== v) el.value = v;
+  });
+  el.addEventListener("keydown", (e) => {
+    if (e.key.length > 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!/^[A-Za-z0-9@._%+\-]$/.test(e.key)) e.preventDefault();
+  });
+}
+
+function wireInputGuards() {
+  document.querySelectorAll("input, textarea").forEach(el => {
+    const id = (el.id || "").toLowerCase();
+    const type = el.type || "";
+    if (type === "hidden" || type === "checkbox" || type === "radio" || type === "file" || type === "number") return;
+    if (el.dataset.guarded) return;
+    el.dataset.guarded = "1";
+
+    if (type === "tel" || id === "phone" || id === "i-ph" || id === "i-wa" || id === "book-phone" || id === "consult-phone" || id === "order-phone" || id === "u-phone") {
+      guardPhone(el);
+    } else if (type === "password") {
+      el.maxLength = 64;
+    } else if (type === "email" || id === "email" || id === "u-email" || id === "i-em") {
+      guardEmail(el);
+    } else if (id === "code" || id === "sms-code" || /code$/.test(id) || el.inputMode === "numeric") {
+      guardDigits(el, 6);
+    } else if (/cvv/i.test(id)) {
+      guardDigits(el, 3);
+    } else if (/expiry|exp-/i.test(id)) {
+      guardDigits(el, 4);
+    } else if (/card/i.test(id)) {
+      guardDigits(el, 16);
+    } else if (/name|author|role/.test(id) && type === "text") {
+      guardName(el);
+    } else if (type === "date" || type === "time") {
+      return;
+    } else if (el.tagName === "TEXTAREA") {
+      if (!el.maxLength) el.maxLength = 1000;
+    } else if (type === "text" || type === "url") {
+      if (!el.maxLength) el.maxLength = id === "order-address" ? 300 : 500;
+    }
+  });
+}
+
+function initInputObserver() {
+  if (window.__inputObserverStarted) return;
+  window.__inputObserverStarted = true;
+  const mo = new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.type !== "childList") continue;
+      let dirty = false;
+      for (const n of m.addedNodes) {
+        if (n.nodeType !== 1) continue;
+        if ((n.matches && n.matches("input, textarea")) || (n.querySelectorAll && n.querySelectorAll("input, textarea").length)) { dirty = true; break; }
+      }
+      if (dirty) wireInputGuards();
+    }
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   applyI18n();
+  wireInputGuards();
+  initInputObserver();
   injectFooter();
 });
