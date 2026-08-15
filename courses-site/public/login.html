@@ -50,7 +50,7 @@
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        window.location.href = data.user.role === "admin" ? "admin.html" : (next || "index.html");
+        window.location.href = data.user.role === "admin" ? "admin.html" : (next || "profile.html");
       } catch (err) { showError(btn, err.message); }
     });
 
