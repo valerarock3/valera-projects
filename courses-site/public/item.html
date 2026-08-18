@@ -77,9 +77,11 @@
         return `
           <button class="btn btn-primary" style="width:100%" id="cta-buy-now">${t("buyNow")}</button>
           <button class="btn btn-outline" style="width:100%;margin-top:8px" id="cta-add-cart">${t("addToCart")}</button>
-          <a class="btn btn-outline" style="width:100%;margin-top:8px" href="cart.html">${t("goToCart")}</a>`;
+          <a class="btn btn-outline" style="width:100%;margin-top:8px" href="cart.html">${t("goToCart")}</a>
+          <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openContactModal()">${t("writeDirectly")}</button>`;
       }
-      return `<button class="btn btn-primary" style="width:100%" id="cta-book">${type === "service" ? t("bookService") : t("bookConsultation")}</button>`;
+      return `<button class="btn btn-primary" style="width:100%" id="cta-book">${type === "service" ? t("bookService") : t("bookConsultation")}</button>
+      <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openContactModal()">${t("writeDirectly")}</button>`;
     }
 
     function reviewsHtml(item) {
@@ -166,8 +168,7 @@
         });
         const bookBtn = document.getElementById("cta-book");
         if (bookBtn) bookBtn.addEventListener("click", () => {
-          if (!me) { location.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search); return; }
-          openBookModal(item);
+          openContactModal();
         });
         container.querySelectorAll("[data-cta]").forEach(a => {
           a.addEventListener("click", (e) => {
