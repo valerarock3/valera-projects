@@ -1925,11 +1925,11 @@ async function seedSectionsExtras() {
 
 async function seedSiteConfig() {
   const defaults = {
-    contact_telegram: "",
-    contact_whatsapp: "",
-    contact_vk: "",
-    contact_phone: "+7 999 000-00-00",
-    contact_email: "support@courses.ru",
+    contact_telegram: "@massage_school_msk",
+    contact_whatsapp: "79035557788",
+    contact_vk: "https://vk.com/massage_school",
+    contact_phone: "+7 (495) 555-77-88",
+    contact_email: "info@massage-school.ru",
   };
   for (const [key, val] of Object.entries(defaults)) {
     await pool.query(
