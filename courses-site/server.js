@@ -779,7 +779,7 @@ async function resolvePayable(itemType, itemId, userId) {
   const type = String(itemType || "").trim();
   if (type === "service" || type === "consultation") {
     const [rows] = await pool.query(
-      "SELECT id, title, price FROM bookings WHERE id = ? AND user_id = ?",
+      "SELECT id, title, price FROM bookings WHERE id = ? AND (user_id = ? OR user_id IS NULL)",
       [Number(itemId), Number(userId)]
     );
     if (!rows.length) return null;
@@ -957,7 +957,7 @@ app.post("/api/payment/sms-confirm",
       );
     } else if (entry.item_type === "service" || entry.item_type === "consultation") {
       await conn.query(
-        "UPDATE bookings SET status = 'paid', method = ? WHERE id = ? AND user_id = ? AND status = 'new'",
+        "UPDATE bookings SET status = 'paid', method = ? WHERE id = ? AND (user_id = ? OR user_id IS NULL) AND status = 'new'",
         [entry.method, entry.course_id, req.session.user.id]
       );
     } else if (entry.item_type === "product") {
@@ -1039,12 +1039,15 @@ app.get("/api/my/purchases", requireAuth, async (req, res) => {
 // Запись на услугу или консультацию (создаёт бронь со статусом 'new', оплата — через SMS)
 app.post("/api/items/:type/:id/book",
   rateLimit({ max: 30, keyFn: req => "book:" + (req.session.user ? req.session.user.id : req.ip) }),
-  requireAuth, async (req, res) => {
+  async (req, res) => {
   const { type, id } = req.params;
   if (type !== "service" && type !== "consultation") {
     return res.status(400).json({ error: "Запись на эту позицию недоступна" });
   }
-  const { date, time, comment } = req.body || {};
+  const { date, time, comment, name: guestName, phone: guestPhone } = req.body || {};
+  const userId = req.session.user ? req.session.user.id : null;
+  const gName = String(guestName || "").trim() || (req.session.user ? req.session.user.name : "");
+  const gPhone = String(guestPhone || "").trim() || (req.session.user ? req.session.user.phone : "");
   try {
     const table = ITEM_TYPES[type];
     const [rows] = await pool.query(
@@ -1056,8 +1059,8 @@ app.post("/api/items/:type/:id/book",
     const row = rows[0];
     const title = type === "consultation" ? row.title : row.name;
     const [result] = await pool.query(
-      "INSERT INTO bookings (user_id, item_type, item_id, title, price, status, booking_date, booking_time, note) VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?)",
-      [req.session.user.id, type, Number(id), title, Number(row.price) || 0, String(date || "").trim(), String(time || "").trim(), String(comment || "").trim()]
+      "INSERT INTO bookings (user_id, item_type, item_id, title, guest_name, guest_phone, price, status, booking_date, booking_time, note) VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)",
+      [userId, type, Number(id), title, gName, gPhone, Number(row.price) || 0, String(date || "").trim(), String(time || "").trim(), String(comment || "").trim()]
     );
     res.json({ success: true, bookingId: result.insertId });
   } catch (err) { serverError(res, err); }
@@ -1541,8 +1544,9 @@ app.get("/api/admin/bookings", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT b.id, b.item_type, b.item_id, b.title, b.price, b.method, b.status,
-         b.booking_date, b.booking_time, b.note, b.created_at, u.name AS user_name, u.phone AS user_phone
-       FROM bookings b JOIN users u ON u.id = b.user_id
+         b.booking_date, b.booking_time, b.note, b.created_at, b.guest_name, b.guest_phone,
+         COALESCE(u.name, b.guest_name) AS user_name, COALESCE(u.phone, b.guest_phone) AS user_phone
+       FROM bookings b LEFT JOIN users u ON u.id = b.user_id
        ORDER BY b.created_at DESC`
     );
     res.json(rows);

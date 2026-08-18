@@ -217,10 +217,12 @@ async function initSchema() {
     await conn.query(`
       CREATE TABLE IF NOT EXISTS bookings (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        user_id INT NOT NULL,
+        user_id INT NULL,
         item_type ENUM('service','consultation') NOT NULL,
         item_id INT NOT NULL,
         title VARCHAR(200) NOT NULL,
+        guest_name VARCHAR(200) NOT NULL DEFAULT '',
+        guest_phone VARCHAR(50) NOT NULL DEFAULT '',
         price DECIMAL(10,2) NOT NULL DEFAULT 0,
         method VARCHAR(50) NOT NULL DEFAULT '',
         status ENUM('new','paid','cancelled') NOT NULL DEFAULT 'new',
@@ -228,7 +230,7 @@ async function initSchema() {
         booking_time VARCHAR(20) NOT NULL DEFAULT '',
         note VARCHAR(500) NOT NULL DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
