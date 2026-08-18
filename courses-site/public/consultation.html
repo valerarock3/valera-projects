@@ -41,17 +41,13 @@
             <span class="price ${Number(c.price) === 0 ? "free" : ""}">${Number(c.price) === 0 ? t("free") : fmtPrice(c.price)}</span>
           </div>
           <div class="consult-footer">
-            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();bookConsultation(${c.id}, '${escapeHtml(c.title).replace(/'/g, "\\'")}')">${t("bookConsultation")}</button>
+            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=consultation&id=${c.id}'">${t("details")}</button>
           </div>
         </div>
       `).join("");
     } catch (err) {
       grid.innerHTML = `<div class="empty">${err.message}</div>`;
     }
-  }
-
-  function bookConsultation(id, title) {
-    openContactModal();
   }
 
   loadConsultations();

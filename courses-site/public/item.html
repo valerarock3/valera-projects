@@ -80,8 +80,7 @@
           <a class="btn btn-outline" style="width:100%;margin-top:8px" href="cart.html">${t("goToCart")}</a>
           <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openContactModal()">${t("writeDirectly")}</button>`;
       }
-      return `<button class="btn btn-primary" style="width:100%" id="cta-book">${type === "service" ? t("bookService") : t("bookConsultation")}</button>
-      <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openContactModal()">${t("writeDirectly")}</button>`;
+      return `<button class="btn btn-primary" style="width:100%" onclick="openContactModal()">${t("writeDirectly")}</button>`;
     }
 
     function reviewsHtml(item) {
@@ -166,10 +165,6 @@
           if (!me) { location.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search); return; }
           openPayModal({ itemType: "product", itemId: item.id, title: item.name, price: item.price, onSuccess: () => loadItem() });
         });
-        const bookBtn = document.getElementById("cta-book");
-        if (bookBtn) bookBtn.addEventListener("click", () => {
-          openBookModal(item);
-        });
         container.querySelectorAll("[data-cta]").forEach(a => {
           a.addEventListener("click", (e) => {
             if (me) return;
@@ -207,87 +202,6 @@
         } catch (e) {
           err.textContent = e.message;
           err.classList.add("show");
-        }
-      });
-    }
-
-    function openBookModal(item) {
-      const overlay = document.createElement("div");
-      overlay.className = "modal-overlay";
-      const today = new Date().toISOString().slice(0, 10);
-      const showNamePhone = !me;
-      overlay.innerHTML = `
-        <div class="modal">
-          <h3>${type === "service" ? t("bookService") : t("bookConsultation")}</h3>
-          <div class="form-error" id="book-error"></div>
-          ${showNamePhone ? `
-          <div class="form-group">
-            <label>${t("yourName")}</label>
-            <input id="book-name" placeholder="${escapeHtml(t("enterName"))}">
-          </div>
-          <div class="form-group">
-            <label>${t("yourPhone")}</label>
-            <input id="book-phone" type="tel" inputmode="tel" placeholder="+7 (999) 123-45-67">
-          </div>` : ""}
-          <div class="pay-row">
-            <div class="form-group" style="flex:1">
-              <label>${t("bookingDate")}</label>
-              <input id="book-date" type="date" min="${today}">
-            </div>
-            <div class="form-group" style="flex:1">
-              <label>${t("bookingTime")}</label>
-              <input id="book-time" type="time">
-            </div>
-          </div>
-          <div class="form-group">
-            <label>${t("bookingComment")}</label>
-            <textarea id="book-comment" rows="3" placeholder="${escapeHtml(t("bookingCommentPh"))}"></textarea>
-          </div>
-          <div class="pay-summary">
-            <div class="ps-row"><span class="ps-label">${t("payAmount")}</span></div>
-            <div class="ps-amount">${fmtPrice(item.price)}</div>
-          </div>
-          <button class="btn btn-primary" id="book-submit" style="width:100%">${Number(item.price) > 0 ? t("bookAndPay") : t("book")}</button>
-        </div>`;
-      overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-      document.body.appendChild(overlay);
-      wireInputGuards();
-
-      const errBox = overlay.querySelector("#book-error");
-      const showErr = (m) => { errBox.textContent = m; errBox.classList.add("show"); };
-      overlay.querySelector("#book-submit").addEventListener("click", async () => {
-        const nameEl = overlay.querySelector("#book-name");
-        const phoneEl = overlay.querySelector("#book-phone");
-        const guestName = nameEl ? nameEl.value.trim() : "";
-        const guestPhone = phoneEl ? phoneEl.value.trim() : "";
-        if (nameEl && !guestName) { showErr(t("fillAll")); return; }
-        if (phoneEl && !guestPhone) { showErr(t("fillAll")); return; }
-        if (phoneEl && String(guestPhone).replace(/\D/g, "").length < 10) { showErr(t("phoneInvalid")); return; }
-        const btn = overlay.querySelector("#book-submit");
-        btn.disabled = true;
-        try {
-          const body = {
-            date: overlay.querySelector("#book-date").value,
-            time: overlay.querySelector("#book-time").value,
-            comment: overlay.querySelector("#book-comment").value.trim(),
-          };
-          if (guestName) body.name = guestName;
-          if (guestPhone) body.phone = guestPhone;
-          const res = await apiFetch(`/api/items/${type}/${item.id}/book`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          overlay.remove();
-          if (Number(item.price) > 0) {
-            openPayModal({ itemType: type, itemId: res.bookingId, title: item.name || item.title, price: item.price, onSuccess: () => loadItem() });
-          } else {
-            alert(t("bookSuccess"));
-            loadItem();
-          }
-        } catch (e) {
-          showErr(e.message);
-          btn.disabled = false;
         }
       });
     }

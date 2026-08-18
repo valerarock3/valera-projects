@@ -567,36 +567,40 @@ function messengerUrl(key, value) {
   return null;
 }
 
-async function openContactModal() {
-  if (!window.siteContacts) await loadSiteConfig();
-  const c = window.siteContacts || {};
-  const tg = messengerUrl("contact_telegram", c.contact_telegram);
-  const wa = messengerUrl("contact_whatsapp", c.contact_whatsapp);
-  const vk = messengerUrl("contact_vk", c.contact_vk);
-  const phone = (c.contact_phone || "").trim();
-  const email = (c.contact_email || "").trim();
-  const overlay = document.createElement("div");
-  overlay.className = "modal-overlay";
-  let buttons = "";
-  if (tg) buttons += `<a class="messenger-btn messenger-tg" href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
-  if (wa) buttons += `<a class="messenger-btn messenger-wa" href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
-  if (vk) buttons += `<a class="messenger-btn messenger-vk" href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
-  let contactLine = "";
-  if (phone) contactLine += `<a class="contact-phone" href="tel:${phone.replace(/\D/g, "").startsWith("7") ? "" : "+7"}${phone.replace(/\D/g, "")}">☎ ${t("callUs")}: ${escapeHtml(phone)}</a>`;
-  if (email) contactLine += `<a class="contact-phone" href="mailto:${escapeHtml(email)}" style="margin-top:8px">✉ ${escapeHtml(email)}</a>`;
-  if (!buttons && !contactLine) {
-    contactLine = `<p style="color:var(--text-dim)">${t("consultAsk")}</p>`;
+function openContactModal() {
+  try {
+    const c = window.siteContacts || {};
+    const tg = messengerUrl("contact_telegram", c.contact_telegram);
+    const wa = messengerUrl("contact_whatsapp", c.contact_whatsapp);
+    const vk = messengerUrl("contact_vk", c.contact_vk);
+    const phone = (c.contact_phone || "").trim();
+    const email = (c.contact_email || "").trim();
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+    let buttons = "";
+    if (tg) buttons += `<a class="messenger-btn messenger-tg" href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
+    if (wa) buttons += `<a class="messenger-btn messenger-wa" href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
+    if (vk) buttons += `<a class="messenger-btn messenger-vk" href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
+    let contactLine = "";
+    if (phone) contactLine += `<a class="contact-phone" href="tel:${phone.replace(/\D/g, "").startsWith("7") ? "" : "+7"}${phone.replace(/\D/g, "")}">☎ ${t("callUs")}: ${escapeHtml(phone)}</a>`;
+    if (email) contactLine += `<a class="contact-phone" href="mailto:${escapeHtml(email)}" style="margin-top:8px">✉ ${escapeHtml(email)}</a>`;
+    if (!buttons && !contactLine) {
+      contactLine = `<p style="color:var(--text-dim)">${t("consultAsk")}</p>`;
+    }
+    overlay.innerHTML = `
+      <div class="modal contact-modal">
+        <h3>${t("writeDirectly")}</h3>
+        <p class="contact-subtitle">${t("chooseMessenger")}</p>
+        <div class="messenger-grid">${buttons}</div>
+        ${contactLine}
+        <button class="btn btn-outline btn-sm" style="margin-top:18px" onclick="this.closest('.modal-overlay').remove()">${t("close")}</button>
+      </div>`;
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  } catch (err) {
+    console.error("openContactModal error:", err);
+    alert("Modal error: " + err.message);
   }
-  overlay.innerHTML = `
-    <div class="modal contact-modal">
-      <h3>${t("writeDirectly")}</h3>
-      <p class="contact-subtitle">${t("chooseMessenger")}</p>
-      <div class="messenger-grid">${buttons}</div>
-      ${contactLine}
-      <button class="btn btn-outline btn-sm" style="margin-top:18px" onclick="this.closest('.modal-overlay').remove()">${t("close") || "Закрыть"}</button>
-    </div>`;
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
-  document.body.appendChild(overlay);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

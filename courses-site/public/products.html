@@ -49,7 +49,6 @@
           <div class="product-actions">
             <button class="btn btn-outline btn-sm" data-add-cart="${p.id}" ${p.in_stock ? "" : "disabled"}>${t("addToCart")}</button>
             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=product&id=${p.id}'">${t("details")}</button>
-            <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openContactModal()">${t("book")}</button>
           </div>
         </div>
       </div>
