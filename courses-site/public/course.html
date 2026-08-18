@@ -308,7 +308,7 @@
         const slides = media.map(m => `
           <div class="mg-slide">
             ${m.type === "video"
-              ? `<div class="media-wrap">${speedRow()}<video controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata" src="${escapeHtml(m.url)}"></video></div>`
+              ? `<div class="media-wrap">${renderMedia(m.url)}</div>`
               : `<img src="${escapeHtml(m.url)}" alt="">`}
           </div>`).join("");
         return `
@@ -444,7 +444,19 @@
       let src = url.trim();
       const yt = src.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]+)/);
       if (yt) {
-        return `<div class="video-wrap"><iframe src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen></iframe></div>`;
+        return `<div class="video-embed"><iframe src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture"></iframe></div>`;
+      }
+      const gdrive = src.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
+      if (gdrive) {
+        return `<div class="video-embed"><iframe src="https://drive.google.com/file/d/${gdrive[1]}/preview" frameborder="0" allowfullscreen allow="autoplay"></iframe></div>`;
+      }
+      const ydisk = src.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
+      if (ydisk) {
+        return `<div class="video-embed"><iframe src="https://yadi.sk/d/${ydisk[1]}/preview" frameborder="0" allowfullscreen></iframe></div>`;
+      }
+      const vimeo = src.match(/vimeo\.com\/(\d+)/);
+      if (vimeo) {
+        return `<div class="video-embed"><iframe src="https://player.vimeo.com/video/${vimeo[1]}" frameborder="0" allowfullscreen allow="autoplay;encrypted-media"></iframe></div>`;
       }
       return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="${escapeHtml(src)}"></video></div>`;
     }

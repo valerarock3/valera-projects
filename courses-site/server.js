@@ -244,6 +244,9 @@ function getMediaType(url) {
   if (/\.(mp4|webm|mov|mkv|avi|m4v|ogv)$/.test(clean)) return "video";
   if (/\.(mp3|wav|m4a|aac|oga|flac|ogg)$/.test(clean)) return "audio";
   if (/(youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)/.test(url || "")) return "video";
+  if (/drive\.google\.com\/(?:file\/d\/|open\?id=)/.test(url || "")) return "video";
+  if (/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\//.test(url || "")) return "video";
+  if (/vimeo\.com\/\d+/.test(url || "")) return "video";
   return "image";
 }
 
@@ -294,6 +297,18 @@ function mediaHtml(url, base) {
   const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]+)/);
   if (yt) {
     return `<div class="block"><iframe width="100%" height="380" src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen></iframe></div>`;
+  }
+  const gdrive = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
+  if (gdrive) {
+    return `<div class="block"><iframe width="100%" height="380" src="https://drive.google.com/file/d/${gdrive[1]}/preview" frameborder="0" allowfullscreen></iframe></div>`;
+  }
+  const ydisk = url.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
+  if (ydisk) {
+    return `<div class="block"><iframe width="100%" height="380" src="https://yadi.sk/d/${ydisk[1]}/preview" frameborder="0" allowfullscreen></iframe></div>`;
+  }
+  const vimeo = url.match(/vimeo\.com\/(\d+)/);
+  if (vimeo) {
+    return `<div class="block"><iframe width="100%" height="380" src="https://player.vimeo.com/video/${vimeo[1]}" frameborder="0" allowfullscreen></iframe></div>`;
   }
   return `<div class="block"><video controls src="${abs}"></video></div>`;
 }
