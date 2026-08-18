@@ -1,6 +1,7 @@
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
+const https = require("https");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
@@ -226,6 +227,38 @@ app.get("/api/media/:file", async (req, res) => {
 // Совместимость: старые ссылки /uploads/<файл> перенаправляются на защищённую раздачу.
 app.get("/uploads/:file", (req, res) => {
   res.redirect("/api/media/" + encodeURIComponent(path.basename(req.params.file)));
+});
+
+// Прокси для Google Drive видео: браузер получает прямой <video> поток,
+// обходя ограничения Google на iframe-встраивание.
+app.get("/api/proxy/gdrive", async (req, res) => {
+  try {
+    const id = String(req.query.id || "").trim();
+    if (!id || !/^[\w-]{10,}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid Google Drive file ID" });
+    }
+    const fetchGDrive = (location, depth = 0) => new Promise((resolve, reject) => {
+      if (depth > 5) return reject(new Error("Too many redirects"));
+      https.get(location, resp => {
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          fetchGDrive(resp.headers.location, depth + 1).then(resolve, reject);
+        } else {
+          resolve(resp);
+        }
+      }).on("error", reject);
+    });
+    const upstream = await fetchGDrive(`https://drive.google.com/uc?export=view&id=${id}`);
+    if (upstream.statusCode !== 200) {
+      upstream.resume();
+      return res.status(502).json({ error: "Google Drive returned " + upstream.statusCode });
+    }
+    res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
+    if (upstream.headers["content-length"]) {
+      res.setHeader("Content-Length", upstream.headers["content-length"]);
+    }
+    res.setHeader("Accept-Ranges", "bytes");
+    upstream.pipe(res);
+  } catch (err) { serverError(res, err); }
 });
 
 function requireAuth(req, res, next) {
@@ -682,6 +715,33 @@ app.get("/api/site-reviews", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM site_reviews ORDER BY created_at DESC LIMIT 50");
     res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+// ============ НАСТРОЙКИ САЙТА (мессенджеры, телефон) ============
+
+app.get("/api/site-config", async (_req, res) => {
+  try {
+    const [rows] = await pool.query("SELECT cfg_key, cfg_value FROM site_config");
+    const cfg = {};
+    for (const r of rows) cfg[r.cfg_key] = r.cfg_value;
+    res.json(cfg);
+  } catch (err) { serverError(res, err); }
+});
+
+app.post("/api/admin/site-config", requireAdmin, async (req, res) => {
+  try {
+    const data = req.body || {};
+    const allowed = ["contact_telegram", "contact_whatsapp", "contact_vk", "contact_phone", "contact_email"];
+    for (const key of allowed) {
+      if (key in data) {
+        await pool.query(
+          "INSERT INTO site_config (cfg_key, cfg_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE cfg_value = VALUES(cfg_value)",
+          [key, String(data[key] || "").trim()]
+        );
+      }
+    }
+    res.json({ success: true });
   } catch (err) { serverError(res, err); }
 });
 
@@ -1859,6 +1919,22 @@ async function seedSectionsExtras() {
   }
 }
 
+async function seedSiteConfig() {
+  const defaults = {
+    contact_telegram: "",
+    contact_whatsapp: "",
+    contact_vk: "",
+    contact_phone: "+7 999 000-00-00",
+    contact_email: "support@courses.ru",
+  };
+  for (const [key, val] of Object.entries(defaults)) {
+    await pool.query(
+      "INSERT IGNORE INTO site_config (cfg_key, cfg_value) VALUES (?, ?)",
+      [key, val]
+    );
+  }
+}
+
 app.listen(PORT, async () => {
   try {
     await initSchema();
@@ -1866,6 +1942,7 @@ app.listen(PORT, async () => {
     await seedSections();
     await seedSectionsExtras();
     await seedTestUser();
+    await seedSiteConfig();
     console.log(`Сайт курсов запущен: http://localhost:${PORT}`);
     console.log("Админ: admin@courses.ru / admin123");
     console.log("Пользователь: user@courses.ru / user123");

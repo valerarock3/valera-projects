@@ -367,6 +367,14 @@ async function initSchema() {
         await conn.query(`ALTER TABLE ${table} ADD COLUMN image_url VARCHAR(500) NOT NULL DEFAULT ''`);
       }
     }
+
+    // Глобальные настройки сайта (ссылки на мессенджеры, телефон, email)
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS site_config (
+        cfg_key VARCHAR(100) NOT NULL PRIMARY KEY,
+        cfg_value TEXT NOT NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
   } finally {
     conn.release();
   }

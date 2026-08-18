@@ -29,6 +29,7 @@
         <button data-panel="requests">📨 <span data-i18n="requests">Заявки</span></button>
         <button data-panel="payments">💳 <span data-i18n="payments">Оплаты</span></button>
         <button data-panel="users">👥 <span data-i18n="users">Пользователи</span></button>
+        <button data-panel="settings">⚙ <span data-i18n="settings">Настройки</span></button>
       </div>
       <div class="admin-panel" id="admin-panel"><div class="loading">Загрузка...</div></div>
     </div>
@@ -112,6 +113,9 @@
         allCourses = await apiFetch("/api/courses");
         const users = await apiFetch("/api/admin/users");
         renderUsers(panel, users);
+      } else if (currentPanel === "settings") {
+        const cfg = await apiFetch("/api/site-config");
+        renderSettings(panel, cfg);
       }
       applyI18n();
     }
@@ -861,6 +865,33 @@
             loadPanel();
           } catch (err) { alert(err.message); }
         });
+      });
+    }
+
+    function renderSettings(panel, cfg) {
+      panel.innerHTML = `
+        <div class="panel-title">${t("contactSettings")}</div>
+        <div class="admin-form">
+          <div class="form-group"><label>${t("telegramLink")}</label><input id="cfg-telegram" value="${escapeHtml(cfg.contact_telegram || "")}" placeholder="username или https://t.me/username"></div>
+          <div class="form-group"><label>${t("whatsappLink")}</label><input id="cfg-whatsapp" value="${escapeHtml(cfg.contact_whatsapp || "")}" placeholder="+79991234567 или https://wa.me/79991234567"></div>
+          <div class="form-group"><label>${t("vkLink")}</label><input id="cfg-vk" value="${escapeHtml(cfg.contact_vk || "")}" placeholder="username или https://vk.com/username"></div>
+          <div class="form-group"><label>${t("contactPhone")}</label><input id="cfg-phone" value="${escapeHtml(cfg.contact_phone || "")}" placeholder="+7 999 000-00-00"></div>
+          <div class="form-group"><label>${t("contactEmail")}</label><input id="cfg-email" value="${escapeHtml(cfg.contact_email || "")}" placeholder="support@courses.ru"></div>
+          <button class="btn btn-primary" id="cfg-save">${t("save")}</button>
+        </div>`;
+      document.getElementById("cfg-save").addEventListener("click", async () => {
+        const payload = {
+          contact_telegram: document.getElementById("cfg-telegram").value,
+          contact_whatsapp: document.getElementById("cfg-whatsapp").value,
+          contact_vk: document.getElementById("cfg-vk").value,
+          contact_phone: document.getElementById("cfg-phone").value,
+          contact_email: document.getElementById("cfg-email").value,
+        };
+        await apiFetch("/api/admin/site-config", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        alert(t("settingsSaved"));
       });
     }
 

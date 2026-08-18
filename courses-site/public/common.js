@@ -1,5 +1,6 @@
 let lang = localStorage.getItem("lang") || "ru";
 let theme = localStorage.getItem("theme") || "dark";
+window.siteContacts = {};
 
 function t(key) {
   const dict = TRANSLATIONS[lang] || TRANSLATIONS.ru;
@@ -414,6 +415,17 @@ function injectFooter() {
   footer.className = "site-footer";
   footer.id = "site-footer";
   const year = new Date().getFullYear();
+  const c = window.siteContacts || {};
+  const email = c.contact_email || "support@courses.ru";
+  const phone = c.contact_phone || "+7 999 000-00-00";
+  const phoneDigits = phone.replace(/\D/g, "");
+  const tg = messengerUrl("contact_telegram", c.contact_telegram);
+  const wa = messengerUrl("contact_whatsapp", c.contact_whatsapp);
+  const vk = messengerUrl("contact_vk", c.contact_vk);
+  let socialLinks = "";
+  if (tg) socialLinks += `<a href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
+  if (wa) socialLinks += `<a href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
+  if (vk) socialLinks += `<a href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
   footer.innerHTML = `
     <div class="footer-grid">
       <div>
@@ -431,8 +443,9 @@ function injectFooter() {
       <div class="footer-col">
         <h4>${t("footerContacts")}</h4>
         <a href="consultation.html">${t("consultation")}</a>
-        <a href="mailto:support@courses.ru">support@courses.ru</a>
-        <a href="tel:+79990000000">+7 999 000-00-00</a>
+        <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>
+        <a href="tel:${phoneDigits.startsWith("7") ? "" : "+"}${phoneDigits}">${escapeHtml(phone)}</a>
+        ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ""}
       </div>
     </div>
     <div class="footer-bottom">
@@ -534,9 +547,53 @@ function initInputObserver() {
   mo.observe(document.body, { childList: true, subtree: true });
 }
 
+async function loadSiteConfig() {
+  try {
+    const res = await fetch("/api/site-config");
+    window.siteContacts = await res.json();
+  } catch { window.siteContacts = {}; }
+}
+
+function messengerUrl(key, value) {
+  if (!value) return null;
+  const v = String(value).trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  if (key === "contact_telegram") return "https://t.me/" + v.replace(/^@/, "");
+  if (key === "contact_whatsapp") {
+    const digits = v.replace(/\D/g, "");
+    return "https://wa.me/" + digits;
+  }
+  if (key === "contact_vk") return "https://vk.com/" + v.replace(/^https?:\/\/vk\.com\//i, "");
+  return null;
+}
+
+function openContactModal() {
+  const c = window.siteContacts || {};
+  const tg = messengerUrl("contact_telegram", c.contact_telegram);
+  const wa = messengerUrl("contact_whatsapp", c.contact_whatsapp);
+  const vk = messengerUrl("contact_vk", c.contact_vk);
+  const phone = c.contact_phone || "";
+  const overlay = document.createElement("div");
+  overlay.className = "modal-overlay";
+  let buttons = "";
+  if (tg) buttons += `<a class="messenger-btn messenger-tg" href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
+  if (wa) buttons += `<a class="messenger-btn messenger-wa" href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
+  if (vk) buttons += `<a class="messenger-btn messenger-vk" href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
+  if (!buttons && !phone) { alert(t("consultAsk")); return; }
+  overlay.innerHTML = `
+    <div class="modal contact-modal">
+      <h3>${t("writeDirectly")}</h3>
+      <p class="contact-subtitle">${t("chooseMessenger")}</p>
+      <div class="messenger-grid">${buttons}</div>
+      ${phone ? `<a class="contact-phone" href="tel:${phone.replace(/\D/g, "").startsWith("7") ? "" : "+7"}${phone.replace(/\D/g, "")}">☎ ${t("callUs")}: ${escapeHtml(phone)}</a>` : ""}
+    </div>`;
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   applyI18n();
   wireInputGuards();
   initInputObserver();
-  injectFooter();
+  loadSiteConfig().then(() => injectFooter());
 });

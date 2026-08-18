@@ -73,13 +73,7 @@
   }
 
   function bookConsultation(id, title) {
-    if (!me) {
-      location.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search);
-      return;
-    }
-    document.getElementById("consult-form").scrollIntoView({ behavior: "smooth" });
-    document.getElementById("consult-ask").value = title;
-    document.getElementById("consult-ask").focus();
+    openContactModal();
   }
 
   async function gateForm() {

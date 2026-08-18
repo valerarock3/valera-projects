@@ -789,3 +789,28 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
 .product-actions { display: flex; gap: 8px; margin-top: 12px; }
 .product-actions .btn { flex: 1; white-space: nowrap; }
 .product-actions .btn[disabled] { opacity: .4; cursor: default; }
+
+/* ===== Модалка мессенджеров ===== */
+.contact-modal { text-align: center; }
+.contact-subtitle { color: var(--text-dim); margin-bottom: 20px; font-size: 14px; }
+.messenger-grid { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
+.messenger-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 20px; border-radius: 12px; font-size: 15px; font-weight: 600;
+  text-decoration: none; color: #fff; transition: filter .2s, transform .15s;
+}
+.messenger-btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
+.messenger-tg { background: #2AABEE; }
+.messenger-wa { background: #25D366; }
+.messenger-vk { background: #4C75A3; }
+.contact-phone {
+  display: inline-block; padding: 12px 24px; border-radius: 12px;
+  background: var(--bg-soft); border: 1px solid var(--border);
+  color: var(--text); text-decoration: none; font-weight: 600; font-size: 14px;
+  transition: border-color .2s;
+}
+.contact-phone:hover { border-color: var(--accent); }
+.footer-socials { display: flex; gap: 12px; margin-top: 8px; }
+.footer-socials a { color: var(--text-dim); text-decoration: none; font-size: 13px; }
+.footer-socials a:hover { color: var(--accent); }
+.product-actions .btn-contact { background: var(--bg-soft); border: 1px solid var(--border); color: var(--text-dim); }
