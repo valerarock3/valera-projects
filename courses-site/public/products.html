@@ -47,22 +47,11 @@
             <span class="badge-stock ${p.in_stock ? "in" : "out"}">${p.in_stock ? t("inStock") : t("outOfStock")}</span>
           </div>
           <div class="product-actions">
-            <button class="btn btn-outline btn-sm" data-add-cart="${p.id}" ${p.in_stock ? "" : "disabled"}>${t("addToCart")}</button>
             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();location.href='item.html?type=product&id=${p.id}'">${t("details")}</button>
           </div>
         </div>
       </div>
     `).join("");
-    grid.querySelectorAll("[data-add-cart]").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        addToCart(Number(btn.dataset.addCart), 1);
-        const p = allProducts.find(x => x.id === Number(btn.dataset.addCart));
-        const old = btn.textContent;
-        btn.textContent = "✓ " + t("addedToCart");
-        setTimeout(() => { btn.textContent = old; }, 1200);
-      });
-    });
     renderPagination(document.getElementById("pagination"), Math.min(page, total), total, p => {
       const url = new URL(location.href);
       url.searchParams.set("page", p);

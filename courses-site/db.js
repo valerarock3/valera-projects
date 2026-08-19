@@ -256,11 +256,18 @@ async function initSchema() {
         description TEXT,
         price DECIMAL(10,2) NOT NULL DEFAULT 0,
         image_url VARCHAR(500) NOT NULL DEFAULT '',
+        video_url VARCHAR(500) NOT NULL DEFAULT '',
         category VARCHAR(100) NOT NULL DEFAULT '',
         in_stock TINYINT NOT NULL DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    // Миграция products: добавить video_url если отсутствует
+    const [productCols] = await conn.query("SHOW COLUMNS FROM products");
+    if (!productCols.map(c => c.Field).includes("video_url")) {
+      await conn.query("ALTER TABLE products ADD COLUMN video_url VARCHAR(500) NOT NULL DEFAULT ''");
+    }
 
     await conn.query(`
       CREATE TABLE IF NOT EXISTS services (

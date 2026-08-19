@@ -437,22 +437,18 @@ app.get("/api/me", async (req, res) => {
 app.post("/api/register",
   rateLimit({ max: 5, keyFn: req => "reg:" + req.ip + ":" + String((req.body && req.body.email) || "").trim().toLowerCase() }),
   async (req, res) => {
-  const { name, email, password, phone } = req.body;
-  if (!name || !email || !phone || !password) return res.status(400).json({ error: "Заполните все поля" });
+  const { name, email, password } = req.body;
+  if (!name || !email || !password) return res.status(400).json({ error: "Заполните все поля" });
   if (password.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
-  const phoneDigits = String(phone).replace(/\D/g, "");
-  if (phoneDigits.length < 10 || phoneDigits.length > 15) {
-    return res.status(400).json({ error: "Введите корректный номер телефона" });
-  }
   try {
     const [existing] = await pool.query("SELECT id FROM users WHERE email = ?", [email]);
     if (existing.length) return res.status(409).json({ error: "Email уже зарегистрирован" });
     const hash = await bcrypt.hash(password, 10);
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)",
-      [name, email, phoneDigits, hash]
+      "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+      [name, email, hash]
     );
-    const user = { id: result.insertId, name, email, phone: phoneDigits, role: "user", avatar: "" };
+    const user = { id: result.insertId, name, email, phone: "", role: "user", avatar: "" };
     await regenerateSession(req);
     req.session.user = user;
     res.json({ user });
@@ -482,13 +478,13 @@ app.post("/api/logout", (req, res) => {
 
 // Восстановление пароля: шаг 1 — запрос SMS-кода на привязанный телефон
 app.post("/api/reset/send",
-  rateLimit({ max: 5, keyFn: req => "rsend:" + req.ip + ":" + String((req.body && req.body.phone) || "").replace(/\D/g, "") }),
+  rateLimit({ max: 5, keyFn: req => "rsend:" + req.ip + ":" + String((req.body && req.body.email) || "").trim().toLowerCase() }),
   async (req, res) => {
-  const { phone } = req.body || {};
-  const phoneDigits = String(phone || "").replace(/\D/g, "");
-  if (!phoneDigits) return res.status(400).json({ error: "Заполните все поля" });
+  const { email } = req.body || {};
+  const emailClean = String(email || "").trim().toLowerCase();
+  if (!emailClean) return res.status(400).json({ error: "Заполните все поля" });
   try {
-    const [rows] = await pool.query("SELECT id FROM users WHERE phone = ?", [phoneDigits]);
+    const [rows] = await pool.query("SELECT id FROM users WHERE LOWER(email) = ?", [emailClean]);
     if (!rows.length) return res.status(404).json({ error: "Пользователь не найден" });
     const code = String(Math.floor(100000 + Math.random() * 900000));
     const expiresAtMs = Date.now() + 5 * 60 * 1000;
@@ -508,13 +504,13 @@ app.post("/api/reset/send",
 
 // Восстановление пароля: шаг 2 — проверка кода и установка нового пароля
 app.post("/api/reset/confirm",
-  rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyFn: req => "rconf:" + req.ip + ":" + String((req.body && req.body.phone) || "").replace(/\D/g, "") }),
+  rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyFn: req => "rconf:" + req.ip + ":" + String((req.body && req.body.email) || "").trim().toLowerCase() }),
   async (req, res) => {
-  const { phone, code, newPassword } = req.body || {};
+  const { email, code, newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "Пароль минимум 6 символов" });
-  const phoneDigits = String(phone || "").replace(/\D/g, "");
+  const emailClean = String(email || "").trim().toLowerCase();
   try {
-    const [users] = await pool.query("SELECT id FROM users WHERE phone = ?", [phoneDigits]);
+    const [users] = await pool.query("SELECT id FROM users WHERE LOWER(email) = ?", [emailClean]);
     if (!users.length) return res.status(404).json({ error: "Пользователь не найден" });
     const [codes] = await pool.query(
       "SELECT * FROM sms_codes WHERE session_id = ? AND method = 'reset' AND course_id = ?",
@@ -658,42 +654,6 @@ app.get("/api/products", async (_req, res) => {
   try {
     const [rows] = await pool.query("SELECT * FROM products ORDER BY category, name");
     res.json(rows);
-  } catch (err) { serverError(res, err); }
-});
-
-// Оформление заказа из корзины
-app.post("/api/orders",
-  rateLimit({ max: 30, keyFn: req => "ord:" + (req.session.user ? req.session.user.id : req.ip) }),
-  requireAuth, async (req, res) => {
-  const { name, phone, address, comment, items } = req.body || {};
-  const userName = String(name || "").trim() || (req.session.user && req.session.user.name) || "";
-  const phoneDigits = String(phone || "").replace(/\D/g, "");
-  if (!userName || !phoneDigits) return res.status(400).json({ error: "Заполните имя и телефон" });
-  const cart = Array.isArray(items) ? items.filter(i => i && i.id && Number(i.qty) > 0) : [];
-  if (!cart.length) return res.status(400).json({ error: "Корзина пуста" });
-  try {
-    const ids = cart.map(i => Number(i.id));
-    const [rows] = await pool.query(
-      `SELECT id, name, price, in_stock FROM products WHERE id IN (${ids.map(() => "?").join(",")})`,
-      ids
-    );
-    const byId = new Map(rows.map(r => [r.id, r]));
-    let total = 0;
-    const lines = [];
-    for (const i of cart) {
-      const p = byId.get(Number(i.id));
-      if (!p) return res.status(400).json({ error: "Товар не найден" });
-      if (!p.in_stock) return res.status(400).json({ error: `Товар «${p.name}» закончился` });
-      const qty = Math.min(Math.max(1, Math.floor(Number(i.qty))), 99);
-      const sum = Number(p.price) * qty;
-      total += sum;
-      lines.push({ id: p.id, name: p.name, price: Number(p.price), qty, sum });
-    }
-    const [result] = await pool.query(
-      "INSERT INTO orders (user_id, name, phone, address, comment, total, items) VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [req.session.user.id, userName, phoneDigits, String(address || "").trim(), String(comment || "").trim(), total, JSON.stringify(lines)]
-    );
-    res.json({ success: true, orderId: result.insertId, total });
   } catch (err) { serverError(res, err); }
 });
 
@@ -986,7 +946,7 @@ app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at, p.item_type, p.item_title,
-         u.name AS user_name
+         u.name AS user_name, u.email AS user_email
        FROM payments p
        JOIN users u ON p.user_id = u.id
        ORDER BY p.created_at DESC`
@@ -1392,7 +1352,7 @@ function registerItemAdmin(type, table) {
   });
 
   app.post(`/api/admin/${type}s`, requireAdmin, async (req, res) => {
-    const { name, title, description, price, category, in_stock, image_url, duration_min, icon, instructor_id, expert } = req.body || {};
+    const { name, title, description, price, category, in_stock, image_url, video_url, duration_min, icon, instructor_id, expert } = req.body || {};
     const value = String(name || title || "").trim();
     if (!value) return res.status(400).json({ error: "Укажите название" });
     const insId = instructor_id ? Number(instructor_id) : null;
@@ -1400,8 +1360,8 @@ function registerItemAdmin(type, table) {
       let result;
       if (type === "product") {
         [result] = await pool.query(
-          "INSERT INTO products (name, description, price, category, in_stock, image_url) VALUES (?, ?, ?, ?, ?, ?)",
-          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || ""]
+          "INSERT INTO products (name, description, price, category, in_stock, image_url, video_url) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || "", video_url || ""]
         );
       } else if (type === "service") {
         [result] = await pool.query(
@@ -1419,7 +1379,7 @@ function registerItemAdmin(type, table) {
   });
 
   app.put(`/api/admin/${type}s/:id`, requireAdmin, async (req, res) => {
-    const { name, title, description, price, category, in_stock, image_url, duration_min, icon, instructor_id, expert } = req.body || {};
+    const { name, title, description, price, category, in_stock, image_url, video_url, duration_min, icon, instructor_id, expert } = req.body || {};
     const value = String(name || title || "").trim();
     if (!value) return res.status(400).json({ error: "Укажите название" });
     const insId = instructor_id ? Number(instructor_id) : null;
@@ -1428,8 +1388,8 @@ function registerItemAdmin(type, table) {
       if (!rows.length) return res.status(404).json({ error: "Запись не найдена" });
       if (type === "product") {
         await pool.query(
-          "UPDATE products SET name = ?, description = ?, price = ?, category = ?, in_stock = ?, image_url = ? WHERE id = ?",
-          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || "", req.params.id]
+          "UPDATE products SET name = ?, description = ?, price = ?, category = ?, in_stock = ?, image_url = ?, video_url = ? WHERE id = ?",
+          [value, description || "", Number(price) || 0, category || "", in_stock ? 1 : 0, image_url || "", video_url || "", req.params.id]
         );
       } else if (type === "service") {
         await pool.query(

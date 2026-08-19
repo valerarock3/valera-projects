@@ -108,13 +108,11 @@ function renderNav() {
   const themeBtn = `<button class="icon-btn" id="theme-btn" title="${theme === "dark" ? t("themeLight") : t("themeDark")}">${theme === "dark" ? "☀" : "🌙"}</button>`;
   const langBtn = `<button class="icon-btn" id="lang-btn" title="Language">${lang === "ru" ? "🇬🇧" : "🇷🇺"}</button>`;
   const sLinks = sectionLinks();
-  const cartLink = `<a class="nav-btn cart-link" href="cart.html" data-i18n-title="cart">🛒<span class="cart-badge" id="cart-badge"></span></a>`;
   fetchMe().then(user => {
     if (user) {
       const adminLink = user.role === "admin" ? `<a class="nav-btn" href="admin.html" data-i18n="admin">${t("admin")}</a>` : "";
       nav.innerHTML = `
         ${sLinks}
-        ${cartLink}
         ${themeBtn}
         ${langBtn}
         ${adminLink}
@@ -129,7 +127,6 @@ function renderNav() {
     } else {
       nav.innerHTML = `
         ${sLinks}
-        ${cartLink}
         ${themeBtn}
         ${langBtn}
         <a class="nav-btn" href="register.html" data-i18n="registration">${t("registration")}</a>
@@ -137,7 +134,6 @@ function renderNav() {
     }
     wireNavButtons();
     wireNavToggle();
-    renderCartBadge();
   });
 }
 
@@ -210,42 +206,6 @@ function breadcrumbs(parts) {
   }).join("")}</nav>`;
 }
 
-// Корзина товаров (localStorage)
-function getCart() {
-  try { return JSON.parse(localStorage.getItem("cart") || "[]"); } catch { return []; }
-}
-function saveCart(cart) {
-  localStorage.setItem("cart", JSON.stringify(cart));
-  renderCartBadge();
-}
-function addToCart(id, qty) {
-  const cart = getCart();
-  const line = cart.find(i => i.id === id);
-  if (line) line.qty = Math.min(99, (Number(line.qty) || 1) + (Number(qty) || 1));
-  else cart.push({ id, qty: Math.min(99, Number(qty) || 1) });
-  saveCart(cart);
-}
-function setCartQty(id, qty) {
-  const cart = getCart();
-  const line = cart.find(i => i.id === id);
-  if (!line) return;
-  if (Number(qty) > 0) line.qty = Math.min(99, Number(qty));
-  saveCart(cart.filter(i => i.qty > 0));
-}
-function removeFromCart(id) {
-  saveCart(getCart().filter(i => i.id !== id));
-}
-function cartCount() {
-  return getCart().reduce((s, i) => s + (Number(i.qty) || 0), 0);
-}
-function renderCartBadge() {
-  const el = document.getElementById("cart-badge");
-  if (!el) return;
-  const n = cartCount();
-  el.textContent = n;
-  el.style.display = n ? "flex" : "none";
-}
-
 function fmtPrice(price) {
   const n = Number(price) || 0;
   return n === 0 ? t("free") : n.toLocaleString(lang === "ru" ? "ru-RU" : "en-US") + " ₽";
@@ -282,8 +242,6 @@ function translateError(msg) {
     "Сначала запросите SMS-код": t("smsFirstRequest"),
     "Код истёк. Запросите новый.": t("smsExpired"),
     "Неверный SMS-код": t("smsWrong"),
-    "Корзина пуста": t("cartEmpty"),
-    "Товар не найден": t("productNotFound"),
     "Нельзя удалить самого себя": t("delSelfBlocked"),
     "Нельзя удалить последнего администратора": t("delLastAdmin"),
     "Пользователь не найден": t("userNotFound"),

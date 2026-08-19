@@ -53,7 +53,21 @@
       const images = item.images && item.images.length ? item.images : ["/uploads/course-default.svg"];
       const main = images[0];
       const thumbs = images.slice(1);
+      let videoHtml = "";
+      if (item.video_url) {
+        const url = item.video_url;
+        const yt = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]+)/);
+        const vimeo = url.match(/vimeo\.com\/(\d+)/);
+        if (yt) {
+          videoHtml = `<div class="item-video" style="margin-bottom:16px"><iframe width="100%" height="380" src="https://www.youtube.com/embed/${yt[1]}" frameborder="0" allowfullscreen></iframe></div>`;
+        } else if (vimeo) {
+          videoHtml = `<div class="item-video" style="margin-bottom:16px"><iframe width="100%" height="380" src="https://player.vimeo.com/video/${vimeo[1]}" frameborder="0" allowfullscreen></iframe></div>`;
+        } else {
+          videoHtml = `<div class="item-video" style="margin-bottom:16px"><video controls style="width:100%;border-radius:10px" src="${escapeHtml(url)}"></video></div>`;
+        }
+      }
       return `
+        ${videoHtml}
         <div class="item-gallery">
           <div class="ig-main"><img src="${escapeHtml(main)}" alt="" id="ig-main"></div>
           ${thumbs.length ? `<div class="ig-thumbs">${thumbs.map((u, i) => `
@@ -73,54 +87,9 @@
 
     function ctaHtml(item) {
       if (type === "product") {
-        if (!item.in_stock) return "";
-        return `
-          <button class="btn btn-primary" style="width:100%" id="cta-buy-now">${t("buyNow")}</button>
-          <button class="btn btn-outline" style="width:100%;margin-top:8px" id="cta-add-cart">${t("addToCart")}</button>
-          <a class="btn btn-outline" style="width:100%;margin-top:8px" href="cart.html">${t("goToCart")}</a>
-          <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="openContactModal()">${t("writeDirectly")}</button>`;
+        return `<button class="btn btn-primary" style="width:100%" onclick="openContactModal()">${t("writeDirectly")}</button>`;
       }
       return `<button class="btn btn-primary" style="width:100%" onclick="openContactModal()">${t("writeDirectly")}</button>`;
-    }
-
-    function reviewsHtml(item) {
-      const avg = item.avg_rating ? `⭐ ${t("rating")}: ${item.avg_rating} (${item.reviews.length})` : "";
-      const form = me
-        ? `
-        <div class="card mt-16">
-          <h4 style="margin-bottom:12px">${t("leaveReview")}</h4>
-          <div class="form-group">
-            <label>${t("ratingLabel")}</label>
-            <select id="item-review-rating">
-              <option value="5">${t("rating5")}</option>
-              <option value="4">${t("rating4")}</option>
-              <option value="3">${t("rating3")}</option>
-              <option value="2">${t("rating2")}</option>
-              <option value="1">${t("rating1")}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>${t("commentLabel")}</label>
-            <textarea id="item-review-comment" placeholder="${t("commentPh")}"></textarea>
-          </div>
-          <div class="form-error" id="item-review-error"></div>
-          <button class="btn btn-primary" id="item-review-btn">${t("sendReview")}</button>
-        </div>`
-        : `<div class="empty">${t("loginToReview")} <a class="author-link" href="login.html">${t("login")}</a></div>`;
-      const list = item.reviews.length
-        ? item.reviews.map(r => `
-            <div class="review-item">
-              <span class="stars">${starsHtml(r.rating)}</span>
-              <span class="ruser"> ${escapeHtml(r.author)}</span>
-              <div class="rtext">${nl2br(r.comment || "")}</div>
-            </div>`).join("")
-        : `<div class="empty">${t("noItemReviews")}</div>`;
-      return `
-        <div class="reviews">
-          <h3 class="page-title" style="font-size:20px">${t("reviews")} (${item.reviews.length}) ${avg}</h3>
-          ${form}
-          ${list}
-        </div>`;
     }
 
     async function loadItem() {
@@ -152,19 +121,6 @@
               ${ctaHtml(item)}
             </div>
           </div>`;
-        wireReview();
-        const addBtn = document.getElementById("cta-add-cart");
-        if (addBtn) addBtn.addEventListener("click", () => {
-          addToCart(item.id, 1);
-          const old = addBtn.textContent;
-          addBtn.textContent = "✓ " + t("addedToCart");
-          setTimeout(() => { addBtn.textContent = old; }, 1200);
-        });
-        const buyBtn = document.getElementById("cta-buy-now");
-        if (buyBtn) buyBtn.addEventListener("click", () => {
-          if (!me) { location.href = "login.html?next=" + encodeURIComponent(location.pathname + location.search); return; }
-          openPayModal({ itemType: "product", itemId: item.id, title: item.name, price: item.price, onSuccess: () => loadItem() });
-        });
         container.querySelectorAll("[data-cta]").forEach(a => {
           a.addEventListener("click", (e) => {
             if (me) return;
@@ -181,29 +137,6 @@
       const main = document.getElementById("ig-main");
       if (main) main.src = el.src;
       document.querySelectorAll(".ig-thumb").forEach(t => t.classList.toggle("active", t === el));
-    }
-
-    function wireReview() {
-      const btn = document.getElementById("item-review-btn");
-      if (!btn) return;
-      btn.addEventListener("click", async () => {
-        const err = document.getElementById("item-review-error");
-        err.classList.remove("show");
-        const rating = document.getElementById("item-review-rating").value;
-        const comment = document.getElementById("item-review-comment").value.trim();
-        if (!comment) { err.textContent = t("fillReview"); err.classList.add("show"); return; }
-        try {
-          await apiFetch(`/api/items/${type}/${id}/review`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ rating, comment }),
-          });
-          loadItem();
-        } catch (e) {
-          err.textContent = e.message;
-          err.classList.add("show");
-        }
-      });
     }
 
     loadItem();

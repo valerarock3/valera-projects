@@ -44,9 +44,6 @@
     function renderCourse() {
       const container = document.getElementById("course-container");
       const canAccess = !!course.enrolled || !!course.isAdmin;
-      const avg = course.reviews.length
-        ? (course.reviews.reduce((s, r) => s + r.rating, 0) / course.reviews.length).toFixed(1)
-        : "—";
 
       container.innerHTML = `
         ${breadcrumbs([
@@ -60,7 +57,7 @@
             <div class="cat">${escapeHtml(course.category_name) || t("noCategory")}</div>
             <h1>${escapeHtml(course.title)}</h1>
             <div class="desc">${escapeHtml(course.description || "")}</div>
-            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · ⭐ ${t("rating")}: ${avg} (${course.reviews.length}) · 👁 ${Number(course.views) || 0} ${pluralViews(course.views)}</div>
+            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · 👁 ${Number(course.views) || 0} ${pluralViews(course.views)}</div>
             ${authorCardHtml()}
 
             <div class="lesson-list">
@@ -81,34 +78,7 @@
 
             <div id="lesson-view"></div>
 
-            <div class="reviews">
-              <h3 class="page-title" style="font-size:20px">${t("reviews")} (${course.reviews.length})</h3>
-              ${canAccess ? `
-                <div class="card mt-16">
-                  <h4 style="margin-bottom:12px">${t("leaveReview")}</h4>
-                  <div class="form-group">
-                    <label data-i18n="ratingLabel">Оценка</label>
-                    <select id="review-rating">
-                      <option value="5" data-i18n="rating5">5 — отлично</option>
-                      <option value="4" data-i18n="rating4">4 — хорошо</option>
-                      <option value="3" data-i18n="rating3">3 — нормально</option>
-                      <option value="2" data-i18n="rating2">2 — плохо</option>
-                      <option value="1" data-i18n="rating1">1 — ужасно</option>
-                    </select>
-                  </div>
-                  <div class="form-group">
-                    <label data-i18n="commentLabel">Комментарий</label>
-                    <textarea id="review-comment" data-i18n-ph="commentPh" placeholder="Поделитесь впечатлением о курсе..."></textarea>
-                  </div>
-                  <button class="btn btn-primary" id="review-btn" data-i18n="sendReview">Отправить отзыв</button>
-                </div>` : ""}
-              ${course.reviews.map(r => `
-                <div class="review-item">
-                  <span class="stars">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span>
-                  <span class="ruser"> ${escapeHtml(r.name)}</span>
-                  <div class="rtext">${nl2br(r.comment || "")}</div>
-                </div>`).join("") || `<div class="empty">${t("noReviews")}</div>`}
-            </div>
+
           </div>
 
           <div class="enroll-card card">
@@ -142,16 +112,7 @@
         });
       });
 
-      document.getElementById("review-btn")?.addEventListener("click", async () => {
-        await apiFetch(`/api/courses/${courseId}/review`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            rating: document.getElementById("review-rating").value,
-            comment: document.getElementById("review-comment").value,
-          }),
-        });
-        loadCourse();
-      });
+
     }
 
     function instructorLinkHtml() {
