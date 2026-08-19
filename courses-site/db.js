@@ -384,6 +384,35 @@ async function initSchema() {
         cfg_value TEXT NOT NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        type VARCHAR(50) NOT NULL DEFAULT 'info',
+        title VARCHAR(200) NOT NULL DEFAULT '',
+        body TEXT,
+        link VARCHAR(500) DEFAULT '',
+        is_read TINYINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_user (user_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await conn.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        from_user_id INT NOT NULL,
+        to_user_id INT NOT NULL,
+        text TEXT NOT NULL,
+        is_read TINYINT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_conv (from_user_id, to_user_id),
+        FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
   } finally {
     conn.release();
   }

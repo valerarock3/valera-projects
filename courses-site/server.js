@@ -829,7 +829,7 @@ app.post("/api/items/:type/:id/review", requireAuth, async (req, res) => {
 
 app.post("/api/courses/:id/enroll", requireAuth, async (req, res) => {
   try {
-    const [courses] = await pool.query("SELECT price FROM courses WHERE id = ?", [req.params.id]);
+    const [courses] = await pool.query("SELECT price, title FROM courses WHERE id = ?", [req.params.id]);
     if (!courses.length) return res.status(404).json({ error: "Курс не найден" });
     const price = Number(courses[0].price) || 0;
 
@@ -840,6 +840,10 @@ app.post("/api/courses/:id/enroll", requireAuth, async (req, res) => {
     await pool.query(
       "INSERT IGNORE INTO enrollments (user_id, course_id) VALUES (?, ?)",
       [req.session.user.id, req.params.id]
+    );
+    await pool.query(
+      "INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'purchase', 'Курс куплен', ?, ?)",
+      [req.session.user.id, `Вы записаны на курс: ${courses[0].title}`, `course.html?id=${req.params.id}`]
     );
     res.json({ success: true, paid: false });
   } catch (err) { serverError(res, err); }
@@ -935,6 +939,14 @@ app.post("/api/payment/sms-confirm",
     }
     await conn.query("DELETE FROM sms_codes WHERE id = ?", [entry.id]);
     await conn.commit();
+    if (entry.item_type === "course") {
+      try {
+        await pool.query(
+          "INSERT INTO notifications (user_id, type, title, body, link) VALUES (?, 'purchase', 'Курс куплен', ?, ?)",
+          [req.session.user.id, `Вы записаны на курс: ${info ? info.title : "Курс"}`, `course.html?id=${entry.course_id}`]
+        );
+      } catch (e) { console.error("Failed to create notification:", e.message); }
+    }
     res.json({ success: true, paid: true });
   } catch (err) {
     await conn.rollback();
@@ -946,7 +958,7 @@ app.get("/api/admin/payments", requireAdmin, async (_req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT p.id, p.amount, p.method, p.card_last4, p.created_at, p.item_type, p.item_title,
-         u.name AS user_name, u.email AS user_email
+         u.id AS user_id, u.name AS user_name, u.email AS user_email
        FROM payments p
        JOIN users u ON p.user_id = u.id
        ORDER BY p.created_at DESC`
@@ -1138,6 +1150,98 @@ app.get("/api/certificate/:courseId", requireAuth, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="certificate-${req.params.courseId}.pdf"`);
     res.send(pdf);
+  } catch (err) { serverError(res, err); }
+});
+
+// ============ УВЕДОМЛЕНИЯ ============
+app.get("/api/notifications/unread-count", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ? AND is_read = 0",
+      [req.session.user.id]
+    );
+    res.json({ count: rows[0].count });
+  } catch (err) { serverError(res, err); }
+});
+
+app.get("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      "SELECT id, type, title, body, link, is_read, created_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50",
+      [req.session.user.id]
+    );
+    res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+app.post("/api/notifications/read", requireAuth, async (req, res) => {
+  const { ids, all } = req.body || {};
+  try {
+    if (all) {
+      await pool.query("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0", [req.session.user.id]);
+    } else if (Array.isArray(ids) && ids.length) {
+      await pool.query("UPDATE notifications SET is_read = 1 WHERE user_id = ? AND id IN (?)", [req.session.user.id, ids]);
+    }
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
+});
+
+// ============ СООБЩЕНИЯ ============
+app.get("/api/messages/conversations", requireAuth, async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT u.id AS user_id, u.name, u.avatar,
+        (SELECT text FROM messages WHERE (from_user_id = u.id AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_text,
+        (SELECT created_at FROM messages WHERE (from_user_id = u.id AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = u.id) ORDER BY created_at DESC LIMIT 1) AS last_at,
+        (SELECT COUNT(*) FROM messages WHERE from_user_id = u.id AND to_user_id = ? AND is_read = 0) AS unread
+       FROM users u
+       WHERE u.id IN (SELECT from_user_id FROM messages WHERE to_user_id = ? UNION SELECT to_user_id FROM messages WHERE from_user_id = ?)
+       ORDER BY last_at DESC`,
+      [req.session.user.id, req.session.user.id, req.session.user.id, req.session.user.id, req.session.user.id, req.session.user.id, req.session.user.id]
+    );
+    res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+app.get("/api/messages/:userId", requireAuth, async (req, res) => {
+  const otherId = Number(req.params.userId);
+  if (!otherId) return res.status(400).json({ error: "Неверный пользователь" });
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, from_user_id, to_user_id, text, is_read, created_at FROM messages
+       WHERE (from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)
+       ORDER BY created_at ASC`,
+      [req.session.user.id, otherId, otherId, req.session.user.id]
+    );
+    res.json(rows);
+  } catch (err) { serverError(res, err); }
+});
+
+app.post("/api/messages", requireAuth, async (req, res) => {
+  const { to_user_id, text } = req.body || {};
+  const msgText = String(text || "").trim();
+  if (!to_user_id || !msgText) return res.status(400).json({ error: "Укажите получателя и текст" });
+  if (Number(to_user_id) === req.session.user.id) return res.status(400).json({ error: "Нельзя писать себе" });
+  try {
+    const [u] = await pool.query("SELECT id FROM users WHERE id = ?", [to_user_id]);
+    if (!u.length) return res.status(404).json({ error: "Пользователь не найден" });
+    await pool.query(
+      "INSERT INTO messages (from_user_id, to_user_id, text) VALUES (?, ?, ?)",
+      [req.session.user.id, to_user_id, msgText]
+    );
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
+});
+
+app.post("/api/messages/read", requireAuth, async (req, res) => {
+  const { from_user_id } = req.body || {};
+  if (!from_user_id) return res.status(400).json({ error: "Укажите отправителя" });
+  try {
+    await pool.query(
+      "UPDATE messages SET is_read = 1 WHERE from_user_id = ? AND to_user_id = ? AND is_read = 0",
+      [from_user_id, req.session.user.id]
+    );
+    res.json({ success: true });
   } catch (err) { serverError(res, err); }
 });
 

@@ -737,7 +737,7 @@
               <div class="ar-sub">${t("payUser")}: ${escapeHtml(p.user_name)} · ${p.user_email ? escapeHtml(p.user_email) : ""} · ${t("payMethod")}: ${p.method === "card" ? "💳 " + escapeHtml(p.card_last4) : escapeHtml(p.method)} · ${new Date(p.created_at).toLocaleString(lang === "ru" ? "ru-RU" : "en-US")}</div>
             </div>
             <div class="ar-actions">
-              ${p.user_email ? `<button class="btn btn-outline btn-sm" data-msgto="${escapeHtml(p.user_email)}" data-msgname="${escapeHtml(p.user_name)}">✉ Написать</button>` : ""}
+              ${p.user_email ? `              <button class="btn btn-outline btn-sm" data-msgto="${p.user_id}" data-msgname="${escapeHtml(p.user_name)}">✉ Написать</button>` : ""}
               <div style="font-weight:700;color:var(--accent);margin-right:10px">${fmtPrice(p.amount)}</div>
               <button class="btn btn-danger btn-sm" data-pdel="${p.id}">${t("delete")}</button>
             </div>
@@ -791,7 +791,7 @@
               </div>
             </div>
             <div class="ar-actions">
-              <button class="btn btn-outline btn-sm" data-msgto="${escapeHtml(u.email)}" data-msgname="${escapeHtml(u.name)}">✉ Написать</button>
+              <button class="btn btn-outline btn-sm" data-msgto="${u.id}" data-msgname="${escapeHtml(u.name)}">✉ Написать</button>
               <button class="btn btn-outline btn-sm" data-role="${u.id}" data-new="${u.role === "admin" ? "user" : "admin"}">
                 ${u.role === "admin" ? t("makeUser") : t("makeAdmin")}
               </button>
@@ -1285,33 +1285,33 @@
       });
     }
 
-    function openMessageModal(email, name) {
+    function openMessageModal(userId, name) {
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay";
       overlay.innerHTML = `
         <div class="modal">
-          <h3>✉ Написать ${escapeHtml(name || "")}</h3>
-          <div class="form-group"><label>Email</label><input id="msg-email" value="${escapeHtml(email || "")}" readonly></div>
-          <div class="form-group"><label>Сообщение</label><textarea id="msg-text" rows="5" placeholder="Текст сообщения..."></textarea></div>
+          <h3>✉ ${t("sendMessage")} ${escapeHtml(name || "")}</h3>
+          <div class="form-group"><label>${t("messages")}</label><textarea id="msg-text" rows="5" placeholder="${t("sendMessage")}..."></textarea></div>
           <div class="form-actions">
-            <button class="btn btn-primary" id="msg-send">Отправить</button>
-            <button class="btn btn-outline" id="msg-copy">Копировать email</button>
-            <button class="btn btn-outline" id="msg-close">Закрыть</button>
+            <button class="btn btn-primary" id="msg-send">${t("send")}</button>
+            <button class="btn btn-outline" id="msg-close">${t("close")}</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
       const close = () => overlay.remove();
       overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
       overlay.querySelector("#msg-close").addEventListener("click", close);
-      overlay.querySelector("#msg-send").addEventListener("click", () => {
-        const text = encodeURIComponent(overlay.querySelector("#msg-text").value || "");
-        window.location.href = `mailto:${email}?subject=${encodeURIComponent("Сообщение с платформы Курсы")}&body=${text}`;
-      });
-      overlay.querySelector("#msg-copy").addEventListener("click", () => {
-        navigator.clipboard.writeText(email).then(() => {
-          overlay.querySelector("#msg-copy").textContent = "✔ Скопировано";
-          setTimeout(() => { overlay.querySelector("#msg-copy").textContent = "Копировать email"; }, 1500);
-        });
+      overlay.querySelector("#msg-send").addEventListener("click", async () => {
+        const text = overlay.querySelector("#msg-text").value.trim();
+        if (!text) return alert(t("enterMessage"));
+        try {
+          await apiFetch("/api/messages", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ to_user_id: Number(userId), text }),
+          });
+          alert(t("messageSent"));
+          close();
+        } catch (err) { alert(err.message); }
       });
     }
 

@@ -25,7 +25,7 @@ function courseCover(c) {
 
 function pluralViews(n) {
   const k = Math.abs(Number(n) || 0) % 100;
-  if (k >= 11 && k <= 19) return t("viewsWord5");
+  if (lang === "ru" && k >= 11 && k <= 19) return t("viewsWord5");
   const m = k % 10;
   if (lang === "ru") {
     if (m === 1) return t("viewsWord1");
@@ -113,6 +113,8 @@ function renderNav() {
       const adminLink = user.role === "admin" ? `<a class="nav-btn" href="admin.html" data-i18n="admin">${t("admin")}</a>` : "";
       nav.innerHTML = `
         ${sLinks}
+        <button class="icon-btn nav-bell" id="nav-bell" title="${t("notifications")}">🔔<span class="bell-badge" id="bell-badge" style="display:none">0</span></button>
+        <button class="icon-btn" id="nav-msg-btn" title="${t("messages")}" style="font-size:18px">💬</button>
         ${themeBtn}
         ${langBtn}
         ${adminLink}
@@ -124,6 +126,11 @@ function renderNav() {
         await fetch("/api/logout", { method: "POST" });
         window.location.href = "index.html";
       });
+      const bellBtn = document.getElementById("nav-bell");
+      if (bellBtn) bellBtn.addEventListener("click", (e) => { e.stopPropagation(); openNotifications(); });
+      const msgBtn = document.getElementById("nav-msg-btn");
+      if (msgBtn) msgBtn.addEventListener("click", (e) => { e.stopPropagation(); openMessages(); });
+      loadNotifications();
     } else {
       nav.innerHTML = `
         ${sLinks}
@@ -135,6 +142,194 @@ function renderNav() {
     wireNavButtons();
     wireNavToggle();
   });
+}
+
+async function loadNotifications() {
+  try {
+    const data = await apiFetch("/api/notifications/unread-count");
+    const badge = document.getElementById("bell-badge");
+    if (badge) {
+      if (data.count > 0) {
+        badge.textContent = data.count > 99 ? "99+" : data.count;
+        badge.style.display = "";
+      } else {
+        badge.style.display = "none";
+      }
+    }
+  } catch {}
+}
+
+function openNotifications() {
+  let existing = document.getElementById("notif-panel");
+  if (existing) { existing.remove(); return; }
+  const panel = document.createElement("div");
+  panel.id = "notif-panel";
+  panel.className = "notif-panel";
+  panel.innerHTML = `<div class="notif-header"><h4>${t("notifications")}</h4><button class="notif-mark-all" id="notif-mark-all">${t("markAllRead")}</button></div><div class="notif-list" id="notif-list"><div class="loading">${t("loading")}</div></div>`;
+  document.body.appendChild(panel);
+  
+  const bell = document.getElementById("nav-bell");
+  if (bell) {
+    const rect = bell.getBoundingClientRect();
+    panel.style.top = (rect.bottom + 8) + "px";
+    panel.style.right = (window.innerWidth - rect.right) + "px";
+  }
+  
+  document.addEventListener("click", function closeNotif(e) {
+    if (!panel.contains(e.target) && e.target.id !== "nav-bell" && !e.target.closest("#nav-bell")) {
+      panel.remove();
+      document.removeEventListener("click", closeNotif);
+    }
+  });
+  
+  loadNotifList();
+  
+  document.getElementById("notif-mark-all").addEventListener("click", async () => {
+    await apiFetch("/api/notifications/read", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ all: true }) });
+    loadNotifList();
+    loadNotifications();
+  });
+}
+
+async function loadNotifList() {
+  const list = document.getElementById("notif-list");
+  if (!list) return;
+  try {
+    const data = await apiFetch("/api/notifications");
+    if (!data.length) { list.innerHTML = `<div class="notif-empty">${t("noNotifications")}</div>`; return; }
+    list.innerHTML = data.map(n => `
+      <div class="notif-item ${n.is_read ? "" : "unread"}" data-id="${n.id}">
+        ${n.link ? `<a href="${escapeHtml(n.link)}" class="notif-content">` : `<div class="notif-content">`}
+          <div class="notif-title">${escapeHtml(n.title)}</div>
+          <div class="notif-body">${escapeHtml(n.body || "")}</div>
+          <div class="notif-time">${new Date(n.created_at).toLocaleString("ru")}</div>
+        ${n.link ? `</a>` : `</div>`}
+      </div>
+    `).join("");
+    
+    list.querySelectorAll(".notif-item").forEach(el => {
+      el.addEventListener("click", async () => {
+        const id = Number(el.dataset.id);
+        await apiFetch("/api/notifications/read", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ ids: [id] }) });
+        el.classList.remove("unread");
+        loadNotifications();
+      });
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="notif-empty">${err.message}</div>`;
+  }
+}
+
+function openMessages() {
+  let existing = document.getElementById("messages-panel");
+  if (existing) { existing.remove(); return; }
+  const panel = document.createElement("div");
+  panel.id = "messages-panel";
+  panel.className = "notif-panel";
+  panel.style.width = "400px";
+  panel.innerHTML = `<div class="notif-header"><h4>${t("messages")}</h4><button class="notif-mark-all" id="msg-close-btn">&times;</button></div><div class="notif-list" id="msg-conv-list"><div class="loading">${t("loading")}</div></div>`;
+  document.body.appendChild(panel);
+
+  const msgBtn = document.getElementById("nav-msg-btn");
+  if (msgBtn) {
+    const rect = msgBtn.getBoundingClientRect();
+    panel.style.top = (rect.bottom + 8) + "px";
+    panel.style.right = (window.innerWidth - rect.right) + "px";
+  }
+
+  document.getElementById("msg-close-btn").addEventListener("click", () => panel.remove());
+  document.addEventListener("click", function closeMsg(e) {
+    if (!panel.contains(e.target) && e.target.id !== "nav-msg-btn" && !e.target.closest("#nav-msg-btn")) {
+      panel.remove();
+      document.removeEventListener("click", closeMsg);
+    }
+  });
+
+  loadConversations();
+}
+
+async function loadConversations() {
+  const list = document.getElementById("msg-conv-list");
+  if (!list) return;
+  try {
+    const data = await apiFetch("/api/messages/conversations");
+    if (!data.length) { list.innerHTML = `<div class="notif-empty">${t("noMessages")}</div>`; return; }
+    list.innerHTML = data.map(c => `
+      <div class="notif-item ${c.unread > 0 ? "unread" : ""}" data-uid="${c.user_id}">
+        <div class="notif-content">
+          <div class="notif-title">${escapeHtml(c.name)} ${c.unread > 0 ? `<span class="bell-badge" style="display:inline-flex;position:static;margin-left:4px">${c.unread}</span>` : ""}</div>
+          <div class="notif-body">${escapeHtml(c.last_message || "")}</div>
+        </div>
+      </div>
+    `).join("");
+    list.querySelectorAll(".notif-item").forEach(el => {
+      el.addEventListener("click", () => openChat(Number(el.dataset.uid), el.querySelector(".notif-title").textContent));
+    });
+  } catch (err) {
+    list.innerHTML = `<div class="notif-empty">${err.message}</div>`;
+  }
+}
+
+function openChat(userId, userName) {
+  let existing = document.getElementById("chat-panel");
+  if (existing) existing.remove();
+  const panel = document.createElement("div");
+  panel.id = "chat-panel";
+  panel.className = "notif-panel chat-panel";
+  panel.style.width = "400px";
+  panel.style.height = "500px";
+  panel.innerHTML = `
+    <div class="notif-header">
+      <h4>${escapeHtml(userName)}</h4>
+      <button class="notif-mark-all" id="chat-back">← ${t("messages")}</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"><div class="loading">${t("loading")}</div></div>
+    <div class="chat-input">
+      <input type="text" id="chat-text" placeholder="${t("sendMessage")}" autocomplete="off">
+      <button class="btn btn-primary btn-sm" id="chat-send">→</button>
+    </div>`;
+  document.body.appendChild(panel);
+
+  document.getElementById("chat-back").addEventListener("click", () => { panel.remove(); openMessages(); });
+  document.getElementById("chat-send").addEventListener("click", () => sendChatMessage(userId));
+  document.getElementById("chat-text").addEventListener("keydown", (e) => { if (e.key === "Enter") sendChatMessage(userId); });
+
+  loadChatMessages(userId);
+  apiFetch("/api/messages/read", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ from_user_id: userId }) }).catch(() => {});
+  loadNotifications();
+}
+
+async function loadChatMessages(userId) {
+  const container = document.getElementById("chat-messages");
+  if (!container) return;
+  try {
+    const data = await apiFetch("/api/messages/" + userId);
+    if (!data.length) { container.innerHTML = `<div class="notif-empty">${t("noMessages")}</div>`; return; }
+    const meId = (await fetchMe())?.id;
+    container.innerHTML = data.map(m => `
+      <div class="chat-msg ${m.from_user_id === meId ? "mine" : "theirs"}">
+        <div class="chat-msg-text">${escapeHtml(m.text)}</div>
+        <div class="chat-msg-time">${new Date(m.created_at).toLocaleTimeString("ru", {hour:"2-digit", minute:"2-digit"})}</div>
+      </div>
+    `).join("");
+    container.scrollTop = container.scrollHeight;
+  } catch (err) {
+    container.innerHTML = `<div class="notif-empty">${err.message}</div>`;
+  }
+}
+
+async function sendChatMessage(userId) {
+  const input = document.getElementById("chat-text");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  try {
+    await apiFetch("/api/messages", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ to_user_id: userId, text }) });
+    loadChatMessages(userId);
+  } catch (err) {
+    alert(err.message);
+  }
 }
 
 function wireNavToggle() {
