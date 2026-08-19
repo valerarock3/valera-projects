@@ -1,10 +1,10 @@
 const mysql = require("mysql2/promise");
 
 const pool = mysql.createPool({
-  host: "localhost",
-  user: "app",
-  password: "app_password",
-  database: "courses_db",
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "app",
+  password: process.env.DB_PASSWORD || "app_password",
+  database: process.env.DB_NAME || "courses_db",
   waitForConnections: true,
   connectionLimit: 10,
   charset: "utf8mb4_unicode_ci",

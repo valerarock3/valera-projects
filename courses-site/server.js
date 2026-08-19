@@ -1,3 +1,4 @@
+require("dotenv").config();
 const express = require("express");
 const path = require("path");
 const fs = require("fs");
@@ -11,7 +12,7 @@ const { pool, initSchema } = require("./db");
 const seedData = require("./seed-data.json");
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -36,7 +37,7 @@ app.use("/uploads", (req, res, next) => {
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use(session({
-  secret: "courses_secret_key_2026",
+  secret: process.env.SESSION_SECRET || "courses_secret_key_2026",
   resave: false,
   saveUninitialized: false,
   cookie: {

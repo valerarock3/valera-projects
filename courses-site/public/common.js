@@ -271,6 +271,8 @@ async function loadConversations() {
 }
 
 function openChat(userId, userName) {
+  const oldConv = document.getElementById("messages-panel");
+  if (oldConv) oldConv.remove();
   let existing = document.getElementById("chat-panel");
   if (existing) existing.remove();
   const panel = document.createElement("div");
@@ -278,6 +280,9 @@ function openChat(userId, userName) {
   panel.className = "notif-panel chat-panel";
   panel.style.width = "400px";
   panel.style.height = "500px";
+  panel.style.top = "60px";
+  panel.style.right = "20px";
+  panel.style.zIndex = "700";
   panel.innerHTML = `
     <div class="notif-header">
       <h4>${escapeHtml(userName)}</h4>

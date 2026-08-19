@@ -1,0 +1,263 @@
+-- Courses Site: Complete Database Schema
+-- Usage: mysql -u root -p < schema.sql
+
+CREATE DATABASE IF NOT EXISTS courses_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE courses_db;
+
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(190) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL,
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  avatar VARCHAR(500) NOT NULL DEFAULT '',
+  role ENUM('user','admin') NOT NULL DEFAULT 'user',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS categories (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  description TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS instructors (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  specialty VARCHAR(200) NOT NULL DEFAULT '',
+  bio TEXT,
+  experience VARCHAR(100) NOT NULL DEFAULT '',
+  avatar VARCHAR(500) NOT NULL DEFAULT '',
+  socials TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS courses (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  category_id INT,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  instructor VARCHAR(100),
+  instructor_id INT NULL,
+  image_url VARCHAR(500),
+  views INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
+  FOREIGN KEY (instructor_id) REFERENCES instructors(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  course_id INT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  content TEXT,
+  duration_min INT DEFAULT 0,
+  position INT DEFAULT 0,
+  video_url VARCHAR(500) DEFAULT '',
+  image_url VARCHAR(500) DEFAULT '',
+  quiz TEXT,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS course_media (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  course_id INT NOT NULL,
+  type ENUM('image','video','audio') NOT NULL DEFAULT 'image',
+  url VARCHAR(500) NOT NULL,
+  position INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS enrollments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  course_id INT NOT NULL,
+  progress INT NOT NULL DEFAULT 0,
+  enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_course (user_id, course_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS payments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  course_id INT NULL,
+  item_type ENUM('course','product','service','consultation','order') NOT NULL DEFAULT 'course',
+  item_title VARCHAR(200) NOT NULL DEFAULT '',
+  amount DECIMAL(10,2) NOT NULL,
+  status ENUM('completed') NOT NULL DEFAULT 'completed',
+  method VARCHAR(50),
+  card_last4 VARCHAR(4),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS sms_codes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  session_id VARCHAR(190) NOT NULL,
+  code VARCHAR(10) NOT NULL,
+  course_id INT NOT NULL,
+  item_type VARCHAR(20) NOT NULL DEFAULT 'course',
+  price DECIMAL(10,2) NOT NULL,
+  method VARCHAR(50),
+  card_last4 VARCHAR(4),
+  expires_at_ms BIGINT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_session (session_id),
+  KEY idx_expiry (expires_at_ms)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS bookings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  item_type ENUM('service','consultation') NOT NULL,
+  item_id INT NOT NULL,
+  title VARCHAR(200) NOT NULL,
+  guest_name VARCHAR(200) NOT NULL DEFAULT '',
+  guest_phone VARCHAR(50) NOT NULL DEFAULT '',
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  method VARCHAR(50) NOT NULL DEFAULT '',
+  status ENUM('new','paid','cancelled') NOT NULL DEFAULT 'new',
+  booking_date VARCHAR(20) NOT NULL DEFAULT '',
+  booking_time VARCHAR(20) NOT NULL DEFAULT '',
+  note VARCHAR(500) NOT NULL DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  course_id INT NOT NULL,
+  rating TINYINT NOT NULL DEFAULT 5,
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_review (user_id, course_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS products (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  image_url VARCHAR(500) NOT NULL DEFAULT '',
+  video_url VARCHAR(500) NOT NULL DEFAULT '',
+  category VARCHAR(100) NOT NULL DEFAULT '',
+  in_stock TINYINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS services (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  duration_min INT NOT NULL DEFAULT 0,
+  icon VARCHAR(10) NOT NULL DEFAULT '',
+  instructor_id INT NULL,
+  image_url VARCHAR(500) NOT NULL DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (instructor_id) REFERENCES instructors(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS consultations (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  description TEXT,
+  price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  duration_min INT NOT NULL DEFAULT 0,
+  expert VARCHAR(100) NOT NULL DEFAULT '',
+  instructor_id INT NULL,
+  image_url VARCHAR(500) NOT NULL DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (instructor_id) REFERENCES instructors(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS site_reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  author VARCHAR(100) NOT NULL,
+  role VARCHAR(100) NOT NULL DEFAULT '',
+  rating TINYINT NOT NULL DEFAULT 5,
+  text TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS consultation_requests (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  subject VARCHAR(200) NOT NULL DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS orders (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NULL,
+  name VARCHAR(100) NOT NULL,
+  phone VARCHAR(30) NOT NULL DEFAULT '',
+  address VARCHAR(300) NOT NULL DEFAULT '',
+  comment TEXT,
+  total DECIMAL(10,2) NOT NULL DEFAULT 0,
+  items TEXT,
+  status VARCHAR(50) NOT NULL DEFAULT 'new',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS item_images (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  item_type ENUM('product','service','consultation') NOT NULL,
+  item_id INT NOT NULL,
+  url VARCHAR(500) NOT NULL,
+  position INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_item (item_type, item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS item_reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  item_type ENUM('product','service','consultation') NOT NULL,
+  item_id INT NOT NULL,
+  user_id INT NULL,
+  author VARCHAR(100) NOT NULL,
+  rating TINYINT NOT NULL DEFAULT 5,
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_user_item (user_id, item_type, item_id),
+  KEY idx_item (item_type, item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS site_config (
+  cfg_key VARCHAR(100) NOT NULL PRIMARY KEY,
+  cfg_value TEXT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  type VARCHAR(50) NOT NULL DEFAULT 'info',
+  title VARCHAR(200) NOT NULL DEFAULT '',
+  body TEXT,
+  link VARCHAR(500) DEFAULT '',
+  is_read TINYINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_user (user_id),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  from_user_id INT NOT NULL,
+  to_user_id INT NOT NULL,
+  text TEXT NOT NULL,
+  is_read TINYINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_conv (from_user_id, to_user_id),
+  FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
