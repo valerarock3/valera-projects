@@ -1,5 +1,6 @@
 let lang = localStorage.getItem("lang") || "ru";
 let theme = localStorage.getItem("theme") || "dark";
+document.documentElement.dataset.theme = theme;
 window.siteContacts = {};
 
 function t(key) {
@@ -602,7 +603,6 @@ function injectFooter() {
         <h4>${t("footerContacts")}</h4>
         <a href="consultation.html">${t("consultation")}</a>
         <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>
-        <a href="tel:${phoneDigits.startsWith("7") ? "" : "+"}${phoneDigits}">${escapeHtml(phone)}</a>
         ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ""}
       </div>
     </div>
