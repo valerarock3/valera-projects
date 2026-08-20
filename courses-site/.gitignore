@@ -12,6 +12,9 @@ run_courses.ps1
 run_courses.vbs
 open_workbench.ps1
 
+# User uploads
+data/uploads/
+
 # OS files
 .DS_Store
 Thumbs.db

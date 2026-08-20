@@ -6,6 +6,8 @@ const https = require("https");
 const session = require("express-session");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
+const helmet = require("helmet");
+const compression = require("compression");
 const PDFDocument = require("pdfkit");
 const QRCode = require("qrcode");
 const { pool, initSchema } = require("./db");
@@ -14,6 +16,8 @@ const seedData = require("./seed-data.json");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+app.use(compression());
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Базовые заголовки безопасности для всех ответов
@@ -1093,7 +1097,14 @@ app.get("/api/my", requireAuth, async (req, res) => {
   } catch (err) { serverError(res, err); }
 });
 
-const CERT_FONT = "C:/Windows/Fonts/arial.ttf";
+const CERT_FONT = (() => {
+  const candidates = process.platform === "win32"
+    ? ["C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/times.ttf"]
+    : ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/TTF/DejaVuSans.ttf"];
+  for (const p of candidates) { if (fs.existsSync(p)) return p; }
+  console.warn("[CERT] No TTF font found — certificates may fail");
+  return null;
+})();
 
 function makeCertificatePDF(userName, courseTitle) {
   return new Promise((resolve, reject) => {
@@ -1112,24 +1123,25 @@ function makeCertificatePDF(userName, courseTitle) {
       doc.rect(18, 18, W - 36, H - 36).lineWidth(2).strokeColor(gold).stroke();
       doc.rect(24, 24, W - 48, H - 48).lineWidth(0.8).strokeColor(gold).stroke();
 
-      doc.registerFont("Main", CERT_FONT);
-      doc.font("Main").fontSize(34).fillColor(gold).text("СЕРТИФИКАТ", 0, 70, { align: "center", width: W });
-      doc.font("Main").fontSize(15).fillColor(dark).text("об успешном завершении курса", 0, 128, { align: "center", width: W });
+      if (CERT_FONT) doc.registerFont("Main", CERT_FONT);
+      const fontName = CERT_FONT ? "Main" : "Helvetica";
+      doc.font(fontName).fontSize(34).fillColor(gold).text("СЕРТИФИКАТ", 0, 70, { align: "center", width: W });
+      doc.font(fontName).fontSize(15).fillColor(dark).text("об успешном завершении курса", 0, 128, { align: "center", width: W });
 
       doc.moveTo(90, 175).lineTo(W - 90, 175).lineWidth(1).strokeColor(gold).stroke();
 
-      doc.font("Main").fontSize(16).fillColor(dark).text("Настоящим подтверждается, что", 0, 205, { align: "center", width: W });
+      doc.font(fontName).fontSize(16).fillColor(dark).text("Настоящим подтверждается, что", 0, 205, { align: "center", width: W });
 
-      doc.font("Main").fontSize(40).fillColor("#0d1520").text(userName, 0, 250, { align: "center", width: W });
+      doc.font(fontName).fontSize(40).fillColor("#0d1520").text(userName, 0, 250, { align: "center", width: W });
       doc.moveTo(150, 315).lineTo(W - 150, 315).lineWidth(0.8).strokeColor("#9aa7b8").stroke();
 
-      doc.font("Main").fontSize(17).fillColor(dark).text("успешно завершил(а) курс", 0, 340, { align: "center", width: W });
-      doc.font("Main").fontSize(24).fillColor(gold).text(courseTitle, 0, 375, { align: "center", width: W });
+      doc.font(fontName).fontSize(17).fillColor(dark).text("успешно завершил(а) курс", 0, 340, { align: "center", width: W });
+      doc.font(fontName).fontSize(24).fillColor(gold).text(courseTitle, 0, 375, { align: "center", width: W });
 
       const dateStr = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
-      doc.font("Main").fontSize(13).fillColor("#5c6b7d").text(dateStr, 0, 440, { align: "center", width: W });
+      doc.font(fontName).fontSize(13).fillColor("#5c6b7d").text(dateStr, 0, 440, { align: "center", width: W });
 
-      doc.font("Main").fontSize(12).fillColor("#7d8da0").text("Платформа онлайн-курсов «Курсы»", 0, 500, { align: "center", width: W });
+      doc.font(fontName).fontSize(12).fillColor("#7d8da0").text("Платформа онлайн-курсов «Курсы»", 0, 500, { align: "center", width: W });
 
       doc.end();
     } catch (err) { reject(err); }
@@ -2018,7 +2030,7 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.error("Ошибка инициализации БД:", err.message);
     if (/Unknown database/i.test(err.message)) {
-      console.error("База данных не создана. Выполните: mysql -u root -p < init_db.sql (или запустите start.bat)");
+      console.error("База данных не создана. Выполните: mysql -u root -p < schema.sql");
     }
   }
 });
