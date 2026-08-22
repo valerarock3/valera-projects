@@ -409,7 +409,7 @@
       }
       const gdrive = src.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
       if (gdrive) {
-        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/gdrive?id=${gdrive[1]}"></video></div>`;
+        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="https://drive.google.com/uc?export=download&id=${gdrive[1]}"></video></div>`;
       }
       const ydisk = src.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
       if (ydisk) {
