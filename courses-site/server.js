@@ -236,32 +236,50 @@ app.get("/uploads/:file", (req, res) => {
 
 // Прокси для Google Drive видео: браузер получает прямой <video> поток,
 // обходя ограничения Google на iframe-встраивание.
+const gDriveMeta = new Map();
+const fetchGDriveRedirect = (location, depth = 0) => new Promise((resolve, reject) => {
+  if (depth > 5) return reject(new Error("Too many redirects"));
+  https.get(location, resp => {
+    if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+      fetchGDriveRedirect(resp.headers.location, depth + 1).then(resolve, reject);
+    } else { resolve(resp); }
+  }).on("error", reject);
+});
 app.get("/api/proxy/gdrive", async (req, res) => {
   try {
     const id = String(req.query.id || "").trim();
     if (!id || !/^[\w-]{10,}$/.test(id)) {
       return res.status(400).json({ error: "Invalid Google Drive file ID" });
     }
-    const fetchGDrive = (location, depth = 0) => new Promise((resolve, reject) => {
-      if (depth > 5) return reject(new Error("Too many redirects"));
-      https.get(location, resp => {
-        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-          fetchGDrive(resp.headers.location, depth + 1).then(resolve, reject);
-        } else {
-          resolve(resp);
-        }
-      }).on("error", reject);
-    });
-    const upstream = await fetchGDrive(`https://drive.google.com/uc?export=view&id=${id}`);
+    const meta = gDriveMeta.get(id);
+    const range = req.headers.range;
+    if (range && meta) {
+      const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(startStr, 10);
+      const end = endStr ? parseInt(endStr, 10) : meta.contentLength - 1;
+      const upstream = await fetchGDriveRedirect(`https://drive.google.com/uc?export=view&id=${id}`);
+      if (upstream.statusCode !== 200) { upstream.resume(); return res.status(502).json({ error: "Google Drive returned " + upstream.statusCode }); }
+      res.setHeader("Content-Type", meta.contentType);
+      res.setHeader("Content-Range", `bytes ${start}-${end}/${meta.contentLength}`);
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Content-Length", end - start + 1);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.status(206);
+      upstream.pipe(res);
+      return;
+    }
+    const upstream = await fetchGDriveRedirect(`https://drive.google.com/uc?export=view&id=${id}`);
     if (upstream.statusCode !== 200) {
       upstream.resume();
       return res.status(502).json({ error: "Google Drive returned " + upstream.statusCode });
     }
-    res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
-    if (upstream.headers["content-length"]) {
-      res.setHeader("Content-Length", upstream.headers["content-length"]);
-    }
+    const ct = upstream.headers["content-type"] || "video/mp4";
+    const cl = parseInt(upstream.headers["content-length"], 10) || 0;
+    if (cl > 0) gDriveMeta.set(id, { contentType: ct, contentLength: cl });
+    res.setHeader("Content-Type", ct);
+    if (cl > 0) res.setHeader("Content-Length", cl);
     res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "public, max-age=86400");
     upstream.pipe(res);
   } catch (err) { serverError(res, err); }
 });
@@ -1661,6 +1679,18 @@ app.post("/api/admin/courses/:id/lessons", requireAdmin, async (req, res) => {
 app.delete("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
   try {
     await pool.query("DELETE FROM lessons WHERE id = ?", [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { serverError(res, err); }
+});
+
+app.put("/api/admin/lessons/:id", requireAdmin, async (req, res) => {
+  const { title, content, duration_min, video_url, image_url, quiz } = req.body;
+  if (!title) return res.status(400).json({ error: "Название урока обязательно" });
+  try {
+    await pool.query(
+      "UPDATE lessons SET title = ?, content = ?, duration_min = ?, video_url = ?, image_url = ?, quiz = ? WHERE id = ?",
+      [title, content || "", duration_min || 0, video_url || "", image_url || "", quiz || null, req.params.id]
+    );
     res.json({ success: true });
   } catch (err) { serverError(res, err); }
 });

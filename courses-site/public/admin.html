@@ -44,6 +44,7 @@
     let me = null;
     let editingCourseId = null;
     let editingInstructorId = null;
+    let editingLessonId = null;
 
     async function checkAdmin() {
       me = await fetchMe();
@@ -366,12 +367,32 @@
               <div class="ar-title">${l.position + 1}. ${escapeHtml(l.title)}</div>
               <div class="ar-sub">⏱ ${l.duration_min || 0} ${t("min")}${l.video_url ? " · 🎬 " + t("videoYes") : ""}${l.image_url ? " · 🖼 " + t("imageYes") : ""}${l.quiz && l.quiz.length ? " · 📝 " + t("quizQuestionsCount") + ": " + l.quiz.length : ""}</div>
             </div>
-            <div class="ar-actions"><button class="btn btn-danger btn-sm" data-del="${l.id}">${t("delete")}</button></div>
+            <div class="ar-actions"><button class="btn btn-outline btn-sm" data-edit="${l.id}">${t("edit")}</button> <button class="btn btn-danger btn-sm" data-del="${l.id}">${t("delete")}</button></div>
           </div>`).join("") || `<div class="empty">${t("lessonNo")}</div>`;
         document.getElementById("l-list").querySelectorAll("[data-del]").forEach(btn => {
           btn.addEventListener("click", async () => {
             await apiFetch(`/api/admin/lessons/${btn.dataset.del}`, { method: "DELETE" });
             loadLessons();
+          });
+        });
+        document.getElementById("l-list").querySelectorAll("[data-edit]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const cid = courseSelect.value;
+            const course = await apiFetch(`/api/courses/${cid}`);
+            const lesson = course.lessons.find(l => l.id === Number(btn.dataset.edit));
+            if (!lesson) return;
+            editingLessonId = lesson.id;
+            document.getElementById("l-title").value = lesson.title || "";
+            document.getElementById("l-content").value = lesson.content || "";
+            document.getElementById("l-video").value = lesson.video_url || "";
+            document.getElementById("l-image").value = lesson.image_url || "";
+            document.getElementById("l-dur").value = lesson.duration_min || 30;
+            if (lesson.quiz) {
+              quizJsonInput().value = typeof lesson.quiz === "string" ? lesson.quiz : JSON.stringify(lesson.quiz);
+              renderQuizPreview();
+            }
+            document.getElementById("l-save").textContent = t("save");
+            document.getElementById("l-title").focus();
           });
         });
       };
@@ -427,17 +448,27 @@
       document.getElementById("l-save").addEventListener("click", async () => {
         let quiz = quizJsonInput().value;
         if (!quiz) { parseQuizNow(); quiz = quizJsonInput().value; }
-        await apiFetch(`/api/admin/courses/${courseSelect.value}/lessons`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: document.getElementById("l-title").value,
-            content: document.getElementById("l-content").value,
-            duration_min: document.getElementById("l-dur").value,
-            video_url: document.getElementById("l-video").value,
-            image_url: document.getElementById("l-image").value,
-            quiz: quiz || null,
-          }),
-        });
+        const body = {
+          title: document.getElementById("l-title").value,
+          content: document.getElementById("l-content").value,
+          duration_min: document.getElementById("l-dur").value,
+          video_url: document.getElementById("l-video").value,
+          image_url: document.getElementById("l-image").value,
+          quiz: quiz || null,
+        };
+        if (editingLessonId) {
+          await apiFetch(`/api/admin/lessons/${editingLessonId}`, {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          editingLessonId = null;
+          document.getElementById("l-save").textContent = t("save");
+        } else {
+          await apiFetch(`/api/admin/courses/${courseSelect.value}/lessons`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+        }
         document.getElementById("l-title").value = "";
         document.getElementById("l-content").value = "";
         document.getElementById("l-video").value = "";

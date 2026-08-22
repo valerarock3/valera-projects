@@ -91,11 +91,11 @@ function getPageName() {
 function sectionLinks() {
   const cur = getPageName();
   const links = [
-    ["index.html", "home"],
-    ["catalog.html", "sectionCourses"],
-    ["products.html", "products"],
-    ["services.html", "services"],
     ["consultation.html", "consultation"],
+    ["services.html", "services"],
+    ["catalog.html", "sectionCourses"],
+    ["index.html", "home"],
+    ["products.html", "products"],
     ["reviews.html", "reviews"],
   ];
   return links.map(([href, key]) =>
@@ -115,7 +115,7 @@ function renderNav() {
       nav.innerHTML = `
         ${sLinks}
         <button class="icon-btn nav-bell" id="nav-bell" title="${t("notifications")}">🔔<span class="bell-badge" id="bell-badge" style="display:none">0</span></button>
-        <button class="icon-btn" id="nav-msg-btn" title="${t("messages")}" style="font-size:18px">💬</button>
+        <button class="icon-btn" id="nav-msg-btn" title="${t("messages")}" style="font-size:18px">💬<span class="bell-badge" id="msg-badge" style="display:none">0</span></button>
         ${themeBtn}
         ${langBtn}
         ${adminLink}
@@ -761,9 +761,61 @@ function openContactModal() {
   }
 }
 
+let lastUnreadMsgCount = 0;
+async function pollMessages() {
+  try {
+    const data = await apiFetch("/api/messages/conversations");
+    const totalUnread = data.reduce((s, c) => s + (c.unread || 0), 0);
+    const msgBadge = document.getElementById("msg-badge");
+    if (msgBadge) {
+      if (totalUnread > 0) {
+        msgBadge.textContent = totalUnread > 99 ? "99+" : totalUnread;
+        msgBadge.style.display = "";
+      } else {
+        msgBadge.style.display = "none";
+      }
+    }
+    if (totalUnread > lastUnreadMsgCount && lastUnreadMsgCount >= 0) {
+      playNotifSound();
+      showToast(t("newMessage"));
+    }
+    lastUnreadMsgCount = totalUnread;
+  } catch {}
+}
+
+function playNotifSound() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(800, ctx.currentTime);
+    osc.frequency.setValueAtTime(600, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+
+function showToast(msg) {
+  let existing = document.getElementById("global-toast");
+  if (existing) existing.remove();
+  const toast = document.createElement("div");
+  toast.id = "global-toast";
+  toast.style.cssText = "position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:12px 24px;border-radius:10px;z-index:9999;font-size:14px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.3);animation:fadeIn .3s";
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   applyI18n();
   wireInputGuards();
   initInputObserver();
   loadSiteConfig().then(() => injectFooter());
+  setInterval(pollMessages, 15000);
+  pollMessages();
 });
