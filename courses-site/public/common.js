@@ -96,10 +96,10 @@ function sectionLinks() {
     ["catalog.html", "sectionCourses"],
     ["index.html", "home"],
     ["products.html", "products"],
-    ["reviews.html", "reviews"],
+    ["https://vk.ru/album-210909831_283688982", "reviews", true],
   ];
-  return links.map(([href, key]) =>
-    `<a class="nav-btn${cur === href ? " active" : ""}" href="${href}" data-i18n="${key}">${t(key)}</a>`
+  return links.map(([href, key, ext]) =>
+    `<a class="nav-btn${cur === href ? " active" : ""}" href="${href}"${ext ? ' target="_blank" rel="noopener"' : ""} data-i18n="${key}">${t(key)}</a>`
   ).join("");
 }
 
