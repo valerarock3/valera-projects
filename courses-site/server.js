@@ -236,7 +236,6 @@ app.get("/uploads/:file", (req, res) => {
 
 // Прокси для Google Drive видео: браузер получает прямой <video> поток,
 // обходя ограничения Google на iframe-встраивание.
-const gDriveMeta = new Map();
 const fetchGDriveRedirect = (location, depth = 0) => new Promise((resolve, reject) => {
   if (depth > 5) return reject(new Error("Too many redirects"));
   https.get(location, resp => {
@@ -251,33 +250,15 @@ app.get("/api/proxy/gdrive", async (req, res) => {
     if (!id || !/^[\w-]{10,}$/.test(id)) {
       return res.status(400).json({ error: "Invalid Google Drive file ID" });
     }
-    const meta = gDriveMeta.get(id);
-    const range = req.headers.range;
-    if (range && meta) {
-      const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(startStr, 10);
-      const end = endStr ? parseInt(endStr, 10) : meta.contentLength - 1;
-      const upstream = await fetchGDriveRedirect(`https://drive.google.com/uc?export=view&id=${id}`);
-      if (upstream.statusCode !== 200) { upstream.resume(); return res.status(502).json({ error: "Google Drive returned " + upstream.statusCode }); }
-      res.setHeader("Content-Type", meta.contentType);
-      res.setHeader("Content-Range", `bytes ${start}-${end}/${meta.contentLength}`);
-      res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Content-Length", end - start + 1);
-      res.setHeader("Cache-Control", "public, max-age=86400");
-      res.status(206);
-      upstream.pipe(res);
-      return;
-    }
     const upstream = await fetchGDriveRedirect(`https://drive.google.com/uc?export=view&id=${id}`);
     if (upstream.statusCode !== 200) {
       upstream.resume();
       return res.status(502).json({ error: "Google Drive returned " + upstream.statusCode });
     }
-    const ct = upstream.headers["content-type"] || "video/mp4";
-    const cl = parseInt(upstream.headers["content-length"], 10) || 0;
-    if (cl > 0) gDriveMeta.set(id, { contentType: ct, contentLength: cl });
-    res.setHeader("Content-Type", ct);
-    if (cl > 0) res.setHeader("Content-Length", cl);
+    res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
+    if (upstream.headers["content-length"]) {
+      res.setHeader("Content-Length", upstream.headers["content-length"]);
+    }
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "public, max-age=86400");
     upstream.pipe(res);
