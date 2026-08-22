@@ -409,7 +409,7 @@
       }
       const gdrive = src.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([\w-]+)/);
       if (gdrive) {
-        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/gdrive?id=${gdrive[1]}"></video></div>`;
+        return `<div class="video-embed"><iframe src="https://drive.google.com/file/d/${gdrive[1]}/preview" frameborder="0" allowfullscreen allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture"></iframe></div>`;
       }
       const ydisk = src.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
       if (ydisk) {
