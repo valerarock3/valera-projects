@@ -264,34 +264,94 @@ app.get("/api/proxy/gdrive", async (req, res) => {
     upstream.pipe(res);
   } catch (err) { serverError(res, err); }
 });
+const extractZip = require("extract-zip");
+const crypto = require("crypto");
+
+const YDISK_CACHE_DIR = path.join(__dirname, "..", "ydisk-cache");
+if (!fs.existsSync(YDISK_CACHE_DIR)) fs.mkdirSync(YDISK_CACHE_DIR, { recursive: true });
+
+const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".ogv"]);
+const ydiskProcessing = new Map();
+
 app.get("/api/proxy/ydisk", async (req, res) => {
   try {
     const id = String(req.query.id || "").trim();
     if (!id || id.length < 3) {
       return res.status(400).json({ error: "Invalid Yandex Disk file ID" });
     }
-    const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${encodeURIComponent(id)}`);
-    if (!apiRes.ok) {
-      return res.status(502).json({ error: "Yandex Disk API returned " + apiRes.status });
+    const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const cacheDir = path.join(YDISK_CACHE_DIR, safeId);
+    if (fs.existsSync(cacheDir)) {
+      const cached = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      if (cached) {
+        const filePath = path.join(cacheDir, cached);
+        const stat = fs.statSync(filePath);
+        res.setHeader("Content-Type", getVideoMime(cached));
+        res.setHeader("Content-Length", stat.size);
+        res.setHeader("Accept-Ranges", "bytes");
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
     }
-    const data = await apiRes.json();
-    if (!data.href) {
-      return res.status(502).json({ error: "No download URL from Yandex Disk" });
+
+    if (ydiskProcessing.has(safeId)) {
+      await ydiskProcessing.get(safeId);
+      const cached = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      if (cached) {
+        const filePath = path.join(cacheDir, cached);
+        const stat = fs.statSync(filePath);
+        res.setHeader("Content-Type", getVideoMime(cached));
+        res.setHeader("Content-Length", stat.size);
+        res.setHeader("Accept-Ranges", "bytes");
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      }
     }
-    const upstream = await fetch(data.href, { redirect: "follow" });
-    if (!upstream.ok) {
-      return res.status(502).json({ error: "Yandex Disk returned " + upstream.status });
-    }
-    const contentType = upstream.headers.get("content-type") || "video/mp4";
-    const contentLength = upstream.headers.get("content-length");
-    res.setHeader("Content-Type", contentType);
-    if (contentLength) res.setHeader("Content-Length", contentLength);
+
+    const promise = (async () => {
+      fs.mkdirSync(cacheDir, { recursive: true });
+      const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${encodeURIComponent(id)}`);
+      if (!apiRes.ok) throw new Error("Yandex API " + apiRes.status);
+      const data = await apiRes.json();
+      if (!data.href) throw new Error("No download URL");
+
+      const zipPath = path.join(cacheDir, "download.zip");
+      const zipRes = await fetch(data.href);
+      if (!zipRes.ok) throw new Error("Download " + zipRes.status);
+      const buffer = Buffer.from(await zipRes.arrayBuffer());
+      fs.writeFileSync(zipPath, buffer);
+
+      await extractZip(zipPath, { dir: cacheDir });
+      try { fs.unlinkSync(zipPath); } catch (_) {}
+
+      const videoFile = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      if (!videoFile) throw new Error("No video file in archive");
+      return videoFile;
+    })();
+
+    ydiskProcessing.set(safeId, promise);
+    const videoFile = await promise;
+    ydiskProcessing.delete(safeId);
+
+    const filePath = path.join(cacheDir, videoFile);
+    const stat = fs.statSync(filePath);
+    res.setHeader("Content-Type", getVideoMime(videoFile));
+    res.setHeader("Content-Length", stat.size);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "public, max-age=86400");
-    const nodeStream = require("stream").Readable.fromWeb(upstream.body);
-    nodeStream.pipe(res);
-  } catch (err) { serverError(res, err); }
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    ydiskProcessing.delete(String(req.query.id || "").replace(/[^a-zA-Z0-9_-]/g, "_"));
+    serverError(res, err);
+  }
 });
+
+function getVideoMime(filename) {
+  const ext = path.extname(filename).toLowerCase();
+  const map = { ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime", ".mkv": "video/x-matroska", ".avi": "video/x-msvideo", ".m4v": "video/x-m4v", ".ogv": "video/ogg" };
+  return map[ext] || "video/mp4";
+}
 
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: "Требуется вход" });
