@@ -40,7 +40,7 @@
 
     <div class="section about-section">
       <div class="about-card">
-        <img src="uploads/elena.jpg" alt="Елена (Magic Ellen)">
+        <img id="leader-photo" src="" alt="" style="display:none">
         <div class="about-info">
           <span class="about-role" data-i18n="aboutRole">Руководитель проекта</span>
           <h2 class="about-name" data-i18n="aboutName">Елена (Magic Ellen)</h2>
@@ -57,8 +57,12 @@
       try {
         const res = await fetch("/api/site-config");
         const cfg = await res.json();
-        const img = document.querySelector(".about-card img");
-        if (cfg.leader_photo && img) img.src = cfg.leader_photo;
+        const img = document.getElementById("leader-photo");
+        if (cfg.leader_photo && img) {
+          img.src = cfg.leader_photo;
+          img.style.display = "";
+          img.alt = cfg.leader_name || "Елена (Magic Ellen)";
+        }
         const name = document.querySelector(".about-name");
         if (cfg.leader_name && name) name.textContent = cfg.leader_name;
         const text = document.querySelector(".about-text");
