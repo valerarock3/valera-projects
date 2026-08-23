@@ -4,6 +4,7 @@ const path = require("path");
 const fs = require("fs");
 const https = require("https");
 const session = require("express-session");
+const MySQLStore = require("express-mysql-session")(session);
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const helmet = require("helmet");
@@ -40,7 +41,16 @@ app.use("/uploads", (req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, "public")));
 
+const sessionStore = new MySQLStore({
+  clearExpired: true,
+  checkExpirationInterval: 900000,
+  expiration: 86400000,
+  createDatabaseTable: true,
+  schema: { tableName: "sessions" },
+}, pool);
+
 app.use(session({
+  store: sessionStore,
   secret: process.env.SESSION_SECRET || "courses_secret_key_2026",
   resave: false,
   saveUninitialized: false,
