@@ -156,8 +156,8 @@ body { font-family: 'Segoe UI', system-ui, Arial, sans-serif; background: var(--
 .section-btn::before { content: ''; position: absolute; inset: 0; opacity: 0; transition: opacity .25s; background: var(--grad-soft); }
 .section-btn:hover { transform: translateY(-5px); box-shadow: var(--card-shadow); border-color: var(--accent); }
 .section-btn:hover::before { opacity: 1; }
-.section-btn .sb-icon { font-size: 34px; position: relative; }
-.section-btn .sb-title { font-size: 16px; font-weight: 700; color: var(--text); position: relative; }
+.section-btn .sb-icon { font-size: 38px; position: relative; }
+.section-btn .sb-title { font-size: 18px; font-weight: 700; color: var(--text); position: relative; letter-spacing: 1px; }
 .section-btn .sb-sub { font-size: 13px; color: var(--text-dim); line-height: 1.5; position: relative; }
 .section-btn .sb-arrow { margin-top: auto; color: var(--accent); font-size: 13px; font-weight: 700; position: relative; transition: transform .2s; }
 .section-btn:hover .sb-arrow { transform: translateX(4px); }
@@ -716,10 +716,17 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
 .footer-col a { display: block; color: var(--text-dim); text-decoration: none; font-size: 14px; padding: 4px 0; transition: all .2s; }
 .footer-col a:hover { color: var(--accent); transform: translateX(3px); }
 .footer-bottom { max-width: 1100px; margin: 28px auto 0; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-faint); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.footer-messenger-col .messenger-btn { padding: 10px 16px; font-size: 14px; margin-bottom: 8px; text-align: left; opacity: 1; }
+.footer-messenger-col .messenger-btn { padding: 10px 16px; font-size: 14px; margin-bottom: 8px; text-align: left; opacity: 1; color: #fff; }
 .footer-messenger-col .messenger-tg { background: #0088cc; }
 .footer-messenger-col .messenger-wa { background: #128c7e; }
 .footer-messenger-col .messenger-vk { background: #3b5998; }
+.footer-email { display: block; color: var(--accent); font-size: 14px; margin-top: 8px; text-decoration: none; font-weight: 600; }
+.footer-email:hover { text-decoration: underline; }
+
+:root[data-theme="light"] .footer-messenger-col .messenger-btn { color: #fff; }
+:root[data-theme="light"] .footer-messenger-col .messenger-tg { background: #0088cc; }
+:root[data-theme="light"] .footer-messenger-col .messenger-wa { background: #25D366; }
+:root[data-theme="light"] .footer-messenger-col .messenger-vk { background: #4C75A3; }
 
 /* Блок «О руководителе» */
 .about-card {

@@ -91,15 +91,15 @@ function getPageName() {
 function sectionLinks() {
   const cur = getPageName();
   const links = [
-    ["consultation.html", "consultation"],
-    ["services.html", "services"],
-    ["catalog.html", "sectionCourses"],
-    ["index.html", "home"],
-    ["products.html", "products"],
-    ["https://vk.ru/album-210909831_283688982", "reviews", true],
+    ["consultation.html", "consultation", false, "📲"],
+    ["services.html", "services", false, "🔮"],
+    ["catalog.html", "sectionCourses", false, "📚"],
+    ["index.html", "home", false, "🏠"],
+    ["products.html", "products", false, "🛍️"],
+    ["https://vk.ru/album-210909831_283688982", "reviews", true, "⭐"],
   ];
-  return links.map(([href, key, ext]) =>
-    `<a class="nav-btn${cur === href ? " active" : ""}" href="${href}"${ext ? ' target="_blank" rel="noopener"' : ""} data-i18n="${key}">${t(key)}</a>`
+  return links.map(([href, key, ext, emoji]) =>
+    `<a class="nav-btn${cur === href ? " active" : ""}" href="${href}"${ext ? ' target="_blank" rel="noopener"' : ""}>${emoji} <span data-i18n="${key}">${t(key)}</span></a>`
   ).join("");
 }
 
@@ -605,6 +605,7 @@ function injectFooter() {
       <div class="footer-col footer-messenger-col">
         <h4>${t("footerContacts")}</h4>
         ${messengerLinks || ""}
+        <a class="footer-email" href="mailto:kuzmina.83@mail.ru">✉ kuzmina.83@mail.ru</a>
       </div>
     </div>
     <div class="footer-bottom">
