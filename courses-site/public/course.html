@@ -236,9 +236,10 @@
       if (gdrive) {
         return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/gdrive?id=${gdrive[1]}"></video></div>`;
       }
-      const ydisk = src.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
+      const ydisk = src.match(/((?:https?:\/\/)?(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/[\w-]+)/);
       if (ydisk) {
-        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/ydisk?id=${encodeURIComponent(ydisk[1])}"></video></div>`;
+        const ydiskUrl = ydisk[1].startsWith("http") ? ydisk[1] : "https://" + ydisk[1];
+        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/ydisk?url=${encodeURIComponent(ydiskUrl)}"></video></div>`;
       }
       const vimeo = src.match(/vimeo\.com\/(\d+)/);
       if (vimeo) {

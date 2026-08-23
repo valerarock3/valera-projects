@@ -275,11 +275,11 @@ const ydiskProcessing = new Map();
 
 app.get("/api/proxy/ydisk", async (req, res) => {
   try {
-    const id = String(req.query.id || "").trim();
-    if (!id || id.length < 3) {
-      return res.status(400).json({ error: "Invalid Yandex Disk file ID" });
+    const ydiskUrl = String(req.query.url || "").trim();
+    if (!ydiskUrl || !/yadi\.sk|disk\.yandex\.\w+/.test(ydiskUrl)) {
+      return res.status(400).json({ error: "Invalid Yandex Disk URL" });
     }
-    const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
+    const safeId = crypto.createHash("md5").update(ydiskUrl).digest("hex");
     const cacheDir = path.join(YDISK_CACHE_DIR, safeId);
     if (fs.existsSync(cacheDir)) {
       const cached = findVideoFile(cacheDir);
@@ -309,7 +309,7 @@ app.get("/api/proxy/ydisk", async (req, res) => {
 
     const promise = (async () => {
       fs.mkdirSync(cacheDir, { recursive: true });
-      const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${encodeURIComponent(id)}`);
+      const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=${encodeURIComponent(ydiskUrl)}`);
       if (!apiRes.ok) throw new Error("Yandex API " + apiRes.status);
       const data = await apiRes.json();
       if (!data.href) throw new Error("No download URL");
@@ -340,7 +340,7 @@ app.get("/api/proxy/ydisk", async (req, res) => {
     res.setHeader("Cache-Control", "public, max-age=86400");
     fs.createReadStream(filePath).pipe(res);
   } catch (err) {
-    ydiskProcessing.delete(String(req.query.id || "").replace(/[^a-zA-Z0-9_-]/g, "_"));
+    ydiskProcessing.delete(safeId);
     serverError(res, err);
   }
 });
