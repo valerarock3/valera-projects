@@ -15,13 +15,6 @@
 
   <div class="container" id="course-container"><div class="loading">Загрузка курса...</div></div>
 
-  <div class="modal-overlay hidden" id="pay-modal">
-    <div class="modal">
-      <h3 data-i18n="payTitle">Оплата курса</h3>
-      <div id="pay-body"></div>
-    </div>
-  </div>
-
   <script src="translations.js"></script>
   <script src="common.js"></script>
   <script>
@@ -57,8 +50,7 @@
             <div class="cat">${escapeHtml(course.category_name) || t("noCategory")}</div>
             <h1>${escapeHtml(course.title)}</h1>
             <div class="desc">${escapeHtml(course.description || "")}</div>
-            <div class="instructor">${t("instructor")}: ${instructorLinkHtml()} · 👁 ${Number(course.views) || 0} ${pluralViews(course.views)}</div>
-            ${authorCardHtml()}
+            <div class="instructor">👁 ${Number(course.views) || 0} ${pluralViews(course.views)}</div>
 
             <div class="lesson-list">
               <h3 class="page-title" style="font-size:20px">${t("lessons")} (${course.lessons.length})</h3>
@@ -83,13 +75,12 @@
 
           <div class="enroll-card card">
             <div class="price">${fmtPrice(course.price)}</div>
-            ${course.enrolled
-              ? `<div style="text-align:center;color:var(--success);font-weight:600;margin-bottom:12px">${t("enrolled")}<br><span style="font-size:13px;color:var(--text-faint)">${t("progress")}: ${course.progress}%</span></div>
+            ${canAccess
+              ? `<div style="text-align:center;color:var(--success);font-weight:600;margin-bottom:12px">${t("enrolled")}</div>
                  ${course.progress >= 100 ? `<a class="btn btn-primary" style="width:100%;margin-bottom:12px" href="/api/certificate/${courseId}">${t("certificate")}</a>` : ""}`
-              : `<button class="btn btn-primary" id="enroll-btn" data-i18n="enrollBtn">Записаться на курс</button>
-                 <button class="btn btn-outline" id="no-account-btn" data-i18n="createAccount">Создать аккаунт</button>`}
+              : `<button class="btn btn-primary" id="write-btn" data-i18n="writeDirectly">Написать</button>`}
             <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:13px;color:var(--text-faint)">
-              📊 ${course.lessons.length} ${pluralLessons(course.lessons.length)}<br>${t("instructor")}: ${instructorLinkHtml()}<br>🗂 ${escapeHtml(course.category_name) || t("noCategory")}
+              📊 ${course.lessons.length} ${pluralLessons(course.lessons.length)}<br>🗂 ${escapeHtml(course.category_name) || t("noCategory")}
             </div>
           </div>
         </div>
@@ -97,15 +88,13 @@
       applyI18n();
       setupGallery();
 
-      document.getElementById("enroll-btn")?.addEventListener("click", startEnroll);
-      document.getElementById("no-account-btn")?.addEventListener("click", () => location.href = "register.html");
+      document.getElementById("write-btn")?.addEventListener("click", () => openContactModal());
 
       document.querySelectorAll(".lesson-item").forEach(item => {
         item.addEventListener("click", () => {
           if (item.dataset.open !== "1") {
             if (!me) { window.location.href = "login.html"; return; }
             alert(t("demoLocked"));
-            document.getElementById("enroll-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
             return;
           }
           showLesson(Number(item.dataset.lesson));
@@ -115,153 +104,32 @@
 
     }
 
-    function instructorLinkHtml() {
-      const info = course.instructor_info;
-      if (!info || !info.id) return escapeHtml(course.instructor) || "—";
-      return `<a class="author-link" href="author.html?id=${info.id}">${escapeHtml(info.name)}</a>`;
-    }
-
-    function authorCardHtml() {
-      const info = course.instructor_info;
-      if (!info || !info.id) return "";
-      return `
-        <div class="author-card card">
-          <img src="${escapeHtml(info.avatar || "/uploads/course-default.svg")}" alt="">
-          <div class="ac-body">
-            <div class="ac-label">${t("aboutAuthor")}</div>
-            <div class="ac-name"><a class="author-link" href="author.html?id=${info.id}">${escapeHtml(info.name)}</a></div>
-            ${info.specialty ? `<div class="ac-spec">${escapeHtml(info.specialty)}</div>` : ""}
-            <a class="btn btn-outline btn-sm" href="author.html?id=${info.id}">${t("viewAuthorProfile")} →</a>
+    async function showLesson(lessonId) {
+      const lesson = course.lessons.find(l => l.id === lessonId);
+      if (!lesson) return;
+      const view = document.getElementById("lesson-view");
+      const fullAccess = !!course.enrolled || !!course.isAdmin;
+      view.innerHTML = `
+        <div class="lesson-view">
+          <h3>${lesson.position + 1}. ${escapeHtml(lesson.title)}</h3>
+          ${lesson.image_url ? `<img class="lesson-img" src="${escapeHtml(lesson.image_url)}" alt="">` : ""}
+          ${lesson.video_url ? renderMedia(lesson.video_url) : ""}
+          <div class="lesson-text">${nl2br(lesson.content)}</div>
+          <div class="lesson-actions">
+            ${!fullAccess ? `<button class="btn btn-primary" id="full-access-btn">${t("fullAccess")}</button>` : ""}
           </div>
+          <div class="lesson-protect-note">🔒 ${t("lessonProtectNote")}</div>
+          <div class="lesson-watermark" aria-hidden="true">${escapeHtml(me ? me.name : "")} · ${escapeHtml(course.title)}</div>
         </div>`;
-    }
-
-    async function startEnroll() {
-      if (!me) { window.location.href = "login.html"; return; }
-      if (Number(course.price) > 0) {
-        openPayModal();
-      } else {
-        await apiFetch(`/api/courses/${courseId}/enroll`, { method: "POST" });
-        await loadCourse();
-      }
-    }
-
-    let currentQr = null;
-
-    function openPayModal() {
-      const modal = document.getElementById("pay-modal");
-      modal.classList.remove("hidden");
-      const body = document.getElementById("pay-body");
-      body.innerHTML = `
-        <div class="pay-summary">
-          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
-          <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
-          <div class="ps-amount">${fmtPrice(course.price)}</div>
-        </div>
-        <div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text" data-i18n="payQrGenerating">Генерируем QR-код...</div></div>
-      `;
-      applyI18n();
-      startQrPayment();
-    }
-
-    async function startQrPayment() {
-      const body = document.getElementById("pay-body");
-      try {
-        const res = await apiFetch(`/api/payment/sms-send`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: Number(courseId), payment: { method: "qr" } }),
-        });
-        currentQr = res.demoCode;
-        body.innerHTML = `
-          <div class="pay-summary">
-            <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
-            <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
-            <div class="ps-amount">${fmtPrice(course.price)}</div>
-          </div>
-          <div class="qr-box">
-            <img class="qr-img" src="${res.qrImage}" alt="QR">
-            <div class="qr-text">${t("payQrText")}</div>
-          </div>
-          <button class="btn btn-primary" id="qr-paid-btn" style="width:100%">${t("payQrPaid")}</button>
-          <div class="secure-note" data-i18n="paySecure">🔒 Демо-оплата. Реальные деньги не списываются.</div>
-        `;
-        applyI18n();
-        document.getElementById("qr-paid-btn").addEventListener("click", () => showSmsStep(currentQr));
-      } catch (err) {
-        body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${err.message}</div></div>`;
-        applyI18n();
-      }
-    }
-
-    function showSmsStep(demoCode) {
-      const body = document.getElementById("pay-body");
-      body.innerHTML = `
-        <div class="pay-summary">
-          <div class="ps-row"><span class="ps-label" data-i18n="payCourse">Курс:</span><span>${escapeHtml(course.title)}</span></div>
-          <div class="ps-row"><span class="ps-label" data-i18n="payAmount">К сумме оплате:</span></div>
-          <div class="ps-amount">${fmtPrice(course.price)}</div>
-        </div>
-        <div class="sms-notice" data-i18n="smsSent">📲 На ваш телефон отправлен SMS-код подтверждения оплаты. Введите его ниже.</div>
-        <div class="demo-code-box">${t("smsDemoCode")}: <b>${demoCode}</b></div>
-        <div class="form-group full">
-          <label data-i18n="smsCodeLabel">SMS-код</label>
-          <input id="sms-code" inputmode="numeric" maxlength="6" placeholder="••••••">
-        </div>
-        <button class="btn btn-primary" id="sms-btn" style="width:100%" data-i18n="smsConfirmBtn">Подтвердить оплату</button>
-        <button class="btn btn-outline" id="sms-resend" style="width:100%;margin-top:8px" data-i18n="smsResend">Отправить код повторно</button>
-      `;
-      applyI18n();
-      wireInputGuards();
-      const input = document.getElementById("sms-code");
-      input.focus();
-      input.addEventListener("input", () => {
-        input.value = input.value.replace(/\D/g, "").slice(0, 6);
-        if (input.value.length === 6) document.getElementById("sms-btn").click();
-      });
-      document.getElementById("sms-btn").addEventListener("click", () => confirmSms(input.value));
-      document.getElementById("sms-resend").addEventListener("click", async () => {
-        try {
-          const res = await apiFetch(`/api/payment/sms-send`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ courseId: Number(courseId), payment: { method: "qr" } }),
-          });
-          currentQr = res.demoCode;
-          document.querySelector(".demo-code-box b").textContent = res.demoCode;
-          alert(t("smsResent"));
-        } catch (err) { alert(err.message); }
+      view.scrollIntoView({ behavior: "smooth", block: "start" });
+      wireSpeed(view);
+      protectLesson(view);
+      const fullAccessBtn = document.getElementById("full-access-btn");
+      if (fullAccessBtn) fullAccessBtn.addEventListener("click", () => {
+        if (!me) { window.location.href = "login.html"; return; }
+        document.getElementById("write-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     }
-
-    async function confirmSms(code) {
-      const btn = document.getElementById("sms-btn");
-      if (!/^\d{6}$/.test(code)) { alert(t("smsCodeInvalid")); return; }
-      btn.disabled = true;
-      const body = document.getElementById("pay-body");
-      body.innerHTML = `<div class="pay-status"><div class="ps-icon">⏳</div><div class="ps-text" data-i18n="payProcessing">Обработка платежа...</div></div>`;
-      applyI18n();
-      try {
-        await apiFetch(`/api/payment/sms-confirm`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: Number(courseId), code }),
-        });
-        body.innerHTML = `<div class="pay-status"><div class="ps-icon">✅</div><div class="ps-text" data-i18n="paySuccess">Оплата прошла успешно!</div></div>`;
-        applyI18n();
-        setTimeout(async () => {
-          document.getElementById("pay-modal").classList.add("hidden");
-          await loadCourse();
-        }, 1200);
-      } catch (err) {
-        body.innerHTML = `<div class="pay-status"><div class="ps-icon">❌</div><div class="ps-text">${err.message}</div></div>`;
-        applyI18n();
-        setTimeout(() => { document.getElementById("pay-modal").classList.add("hidden"); }, 1800);
-      }
-    }
-
-    document.getElementById("pay-modal").addEventListener("click", (e) => {
-      if (e.target === document.getElementById("pay-modal")) document.getElementById("pay-modal").classList.add("hidden");
-    });
-
-    let currentQuiz = [];
 
     function heroMediaHtml(c) {
       const media = (c.media || []).filter(m => m.type !== "audio");
@@ -327,55 +195,12 @@
       }
     }
 
-    function showLesson(lessonId) {
-      const lesson = course.lessons.find(l => l.id === lessonId);
-      if (!lesson) return;
-      const view = document.getElementById("lesson-view");
-      currentQuiz = lesson.quiz || [];
-      const fullAccess = !!course.enrolled || !!course.isAdmin;
-      view.innerHTML = `
-        <div class="lesson-view">
-          <h3>${lesson.position + 1}. ${escapeHtml(lesson.title)}</h3>
-          ${lesson.image_url ? `<img class="lesson-img" src="${escapeHtml(lesson.image_url)}" alt="">` : ""}
-          ${lesson.video_url ? renderMedia(lesson.video_url) : ""}
-          <div class="lesson-text">${nl2br(lesson.content)}</div>
-          ${lesson.quiz && lesson.quiz.length ? renderQuiz(lesson.quiz) : ""}
-          <div class="lesson-actions">
-            ${fullAccess
-              ? `<button class="btn btn-primary" id="complete-btn">${t("courseCompleted")} (${Math.round(((lesson.position + 1) / course.lessons.length) * 100)}%)</button>`
-              : `<button class="btn btn-primary" id="full-access-btn">${t("fullAccess")}</button>`}
-          </div>
-          <div class="lesson-protect-note">🔒 ${t("lessonProtectNote")}</div>
-          <div class="lesson-watermark" aria-hidden="true">${escapeHtml(me ? me.name : "")} · ${escapeHtml(course.title)}</div>
-        </div>`;
-      view.scrollIntoView({ behavior: "smooth", block: "start" });
-      setupQuiz();
-      wireSpeed(view);
-      protectLesson(view);
-      const completeBtn = document.getElementById("complete-btn");
-      if (completeBtn) completeBtn.addEventListener("click", async () => {
-        const data = await apiFetch(`/api/courses/${courseId}/progress`, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ lessonId }),
-        });
-        course.progress = data.progress;
-        renderCourse();
-      });
-      const fullAccessBtn = document.getElementById("full-access-btn");
-      if (fullAccessBtn) fullAccessBtn.addEventListener("click", () => {
-        if (!me) { window.location.href = "login.html"; return; }
-        document.getElementById("enroll-btn")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
-    }
-
     function speedRow() {
       return `<div class="speed-row" role="group" aria-label="${t("speedLabel")}">
         ${[0.75, 1, 1.25, 1.5, 2].map(r => `<button type="button" data-rate="${r}" class="${r === 1 ? "active" : ""}">${r}×</button>`).join("")}
       </div>`;
     }
 
-    // Защита урока от копирования и скачивания: отключает контекстное меню,
-    // выделение текста, сочетания клавиш и перетаскивание, добавляет водяной знак.
     function protectLesson(root) {
       if (!root) return;
       root.querySelectorAll("video, audio").forEach(m => {
@@ -413,7 +238,7 @@
       }
       const ydisk = src.match(/(?:yadi\.sk|disk\.yandex\.\w+)\/[di]\/([\w-]+)/);
       if (ydisk) {
-        return `<div class="video-embed"><iframe src="https://yadi.sk/d/${ydisk[1]}/preview" frameborder="0" allowfullscreen></iframe></div>`;
+        return `<div class="media-wrap">${speedRow()}<video class="video-wrap" controls controlsList="nodownload" disablepictureinpicture oncontextmenu="return false" preload="metadata"><source src="/api/proxy/ydisk?id=${encodeURIComponent(ydisk[1])}"></video></div>`;
       }
       const vimeo = src.match(/vimeo\.com\/(\d+)/);
       if (vimeo) {
@@ -440,75 +265,6 @@
             wrap.querySelectorAll(".speed-row button").forEach(b => b.classList.toggle("active", b === btn));
           });
         });
-      });
-    }
-
-    function renderQuiz(quiz) {
-      return `
-        <div class="quiz-box card">
-          <h4 class="quiz-title">📝 ${t("quizTitle")}</h4>
-          ${quiz.map((q, qi) => `
-            <div class="quiz-q" data-q="${qi}">
-              <div class="qq-text">${qi + 1}. ${escapeHtml(q.q)}</div>
-              ${q.options.map((o, oi) => `
-                <label class="quiz-opt" data-opt="${oi}">
-                  <input type="radio" name="q${qi}" value="${oi}">
-                  <span>${escapeHtml(o)}</span>
-                </label>`).join("")}
-              <div class="qq-result hidden"></div>
-            </div>`).join("")}
-          <button class="btn btn-primary" id="quiz-check" style="width:100%">${t("quizCheck")}</button>
-          <button class="btn btn-outline hidden" id="quiz-retry" style="width:100%;margin-top:8px">${t("quizRetry")}</button>
-          <div class="quiz-score hidden"></div>
-        </div>`;
-    }
-
-    function setupQuiz() {
-      const checkBtn = document.getElementById("quiz-check");
-      if (!checkBtn) return;
-      checkBtn.addEventListener("click", () => {
-        let correct = 0;
-        const total = document.querySelectorAll(".quiz-q").length;
-        document.querySelectorAll(".quiz-q").forEach((qEl, qi) => {
-          const chosen = qEl.querySelector("input:checked");
-          const resEl = qEl.querySelector(".qq-result");
-          const optEls = qEl.querySelectorAll(".quiz-opt");
-          optEls.forEach((o, oi) => o.classList.remove("right", "wrong"));
-          if (!chosen) {
-            resEl.innerHTML = `<span class="qwarn">⚠ ${t("quizNoAnswer")}</span>`;
-            resEl.classList.remove("hidden");
-            return;
-          }
-          const answer = Number(chosen.value);
-          const right = currentQuiz[qi];
-          if (typeof right.correct !== "number" || right.correct < 0) {
-            resEl.innerHTML = `<span class="qwarn">⚠ ${t("quizNoCorrect")}</span>`;
-            resEl.classList.remove("hidden");
-            return;
-          }
-          const isRight = answer === right.correct;
-          if (isRight) correct++;
-          optEls.forEach((o, oi) => {
-            if (oi === right.correct) o.classList.add("right");
-            else if (oi === answer) o.classList.add("wrong");
-          });
-          resEl.innerHTML = isRight
-            ? `<span class="qok">✅ ${t("quizRight")}</span>`
-            : `<span class="qbad">❌ ${t("quizWrong")} — ${t("quizCorrectIs")}: ${escapeHtml(right.options[right.correct])}</span>`;
-          resEl.classList.remove("hidden");
-        });
-        const score = document.querySelector(".quiz-score");
-        score.textContent = `${t("quizResult")}: ${correct}/${total}` + (correct === total ? " 🎉" : "");
-        score.classList.remove("hidden");
-        const retry = document.getElementById("quiz-retry");
-        retry.classList.remove("hidden");
-        retry.addEventListener("click", () => {
-          document.querySelectorAll(".quiz-q input").forEach(i => i.checked = false);
-          document.querySelectorAll(".qq-result").forEach(el => el.classList.add("hidden"));
-          document.querySelectorAll(".quiz-opt").forEach(o => o.classList.remove("right", "wrong"));
-          document.querySelector(".quiz-score").classList.add("hidden");
-          document.getElementById("quiz-retry").classList.add("hidden");
-        }, { once: true });
       });
     }
 

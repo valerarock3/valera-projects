@@ -264,6 +264,38 @@ app.get("/api/proxy/gdrive", async (req, res) => {
     upstream.pipe(res);
   } catch (err) { serverError(res, err); }
 });
+app.get("/api/proxy/ydisk", async (req, res) => {
+  try {
+    const id = String(req.query.id || "").trim();
+    if (!id || !/^[\w-]{5,}$/.test(id)) {
+      return res.status(400).json({ error: "Invalid Yandex Disk file ID" });
+    }
+    const apiRes = await new Promise((resolve, reject) => {
+      https.get(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${id}`, resp => {
+        let body = "";
+        resp.on("data", d => body += d);
+        resp.on("end", () => {
+          try { resolve(JSON.parse(body)); } catch { reject(new Error("Invalid API response")); }
+        });
+      }).on("error", reject);
+    });
+    if (!apiRes.href) {
+      return res.status(502).json({ error: "No download URL from Yandex Disk" });
+    }
+    const upstream = await fetchGDriveRedirect(apiRes.href);
+    if (upstream.statusCode !== 200) {
+      upstream.resume();
+      return res.status(502).json({ error: "Yandex Disk returned " + upstream.statusCode });
+    }
+    res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
+    if (upstream.headers["content-length"]) {
+      res.setHeader("Content-Length", upstream.headers["content-length"]);
+    }
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    upstream.pipe(res);
+  } catch (err) { serverError(res, err); }
+});
 
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.status(401).json({ error: "Требуется вход" });

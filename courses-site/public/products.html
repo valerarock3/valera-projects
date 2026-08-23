@@ -37,7 +37,7 @@
     if (!items.length) { grid.innerHTML = `<div class="empty">${t("noProducts")}</div>`; return; }
     grid.innerHTML = items.map(p => `
       <div class="product-card" onclick="location.href='item.html?type=product&id=${p.id}'">
-        <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy">
+        <img src="${escapeHtml(p.image_url || "/uploads/product-default.svg")}" alt="" loading="lazy" onerror="this.onerror=null;this.src='/uploads/product-default.svg'">
         <div class="product-body">
           <div class="product-cat">${escapeHtml(p.category || "")}</div>
           <div class="product-name">${escapeHtml(p.name)}</div>

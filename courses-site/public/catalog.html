@@ -37,7 +37,7 @@
     if (!items.length) { grid.innerHTML = `<div class="empty">${t("notFound")}</div>`; return; }
     grid.innerHTML = items.map(c => `
       <div class="course-card" onclick="location.href='course.html?id=${c.id}'">
-        <img src="${courseCover(c)}" alt="">
+        <img src="${courseCover(c)}" alt="" onerror="this.onerror=null;this.src='/uploads/course-default.svg'">
         <div class="course-body">
           <div class="course-cat">${escapeHtml(c.category_name) || t("noCategory")}</div>
           <div class="course-title">${escapeHtml(c.title)}</div>
