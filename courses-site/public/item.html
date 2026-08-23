@@ -67,7 +67,7 @@
         } else if (gdrive) {
           videoHtml = `<div class="item-video" style="margin-bottom:16px"><video controls style="width:100%;border-radius:10px" src="/api/proxy/gdrive?id=${gdrive[1]}"></video></div>`;
         } else if (ydisk) {
-          videoHtml = `<div class="item-video" style="margin-bottom:16px"><video controls style="width:100%;border-radius:10px" src="/api/proxy/ydisk?id=${encodeURIComponent(ydisk[1])}"></video></div>`;
+          videoHtml = `<div class="item-video" style="margin-bottom:16px"><iframe width="100%" height="380" src="https://yadi.sk/d/${ydisk[1]}/preview" frameborder="0" allowfullscreen></iframe></div>`;
         } else {
           videoHtml = `<div class="item-video" style="margin-bottom:16px"><video controls style="width:100%;border-radius:10px" src="${escapeHtml(url)}"></video></div>`;
         }
