@@ -585,6 +585,10 @@ function injectFooter() {
   if (tg) socialLinks += `<a href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
   if (wa) socialLinks += `<a href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
   if (vk) socialLinks += `<a href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
+  let messengerLinks = "";
+  if (tg) messengerLinks += `<a class="messenger-btn messenger-tg" href="${escapeHtml(tg)}" target="_blank" rel="noopener">✈ Telegram</a>`;
+  if (wa) messengerLinks += `<a class="messenger-btn messenger-wa" href="${escapeHtml(wa)}" target="_blank" rel="noopener">💬 WhatsApp</a>`;
+  if (vk) messengerLinks += `<a class="messenger-btn messenger-vk" href="${escapeHtml(vk)}" target="_blank" rel="noopener">VK ВКонтакте</a>`;
   footer.innerHTML = `
     <div class="footer-grid">
       <div>
@@ -599,6 +603,7 @@ function injectFooter() {
         <a href="services.html">${t("services")}</a>
       </div>
     </div>
+    ${messengerLinks ? `<div class="footer-messengers">${messengerLinks}</div>` : ""}
     <div class="footer-bottom">
       <span>© ${year} MAGIC🌞SUN ELLEN</span>
       <span>${t("rightsReserved")}</span>
