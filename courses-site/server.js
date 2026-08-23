@@ -324,14 +324,20 @@ app.get("/api/proxy/ydisk", async (req, res) => {
       const data = await apiRes.json();
       if (!data.href) throw new Error("No download URL");
 
-      const zipPath = path.join(cacheDir, "download.zip");
-      const zipRes = await fetch(data.href);
-      if (!zipRes.ok) throw new Error("Download " + zipRes.status);
-      const buffer = Buffer.from(await zipRes.arrayBuffer());
-      fs.writeFileSync(zipPath, buffer);
+      const dlRes = await fetch(data.href);
+      if (!dlRes.ok) throw new Error("Download " + dlRes.status);
+      const contentType = dlRes.headers.get("content-type") || "";
+      const buffer = Buffer.from(await dlRes.arrayBuffer());
 
-      await extractZip(zipPath, { dir: cacheDir });
-      try { fs.unlinkSync(zipPath); } catch (_) {}
+      if (contentType.includes("zip")) {
+        const zipPath = path.join(cacheDir, "download.zip");
+        fs.writeFileSync(zipPath, buffer);
+        await extractZip(zipPath, { dir: cacheDir });
+        try { fs.unlinkSync(zipPath); } catch (_) {}
+      } else {
+        const ext = contentType.includes("webm") ? ".webm" : contentType.includes("ogg") ? ".ogv" : ".mp4";
+        fs.writeFileSync(path.join(cacheDir, "video" + ext), buffer);
+      }
 
       const videoFile = findVideoFile(cacheDir);
       if (!videoFile) throw new Error("No video file in archive");
