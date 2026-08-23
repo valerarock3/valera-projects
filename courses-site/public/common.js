@@ -588,8 +588,8 @@ function injectFooter() {
   footer.innerHTML = `
     <div class="footer-grid">
       <div>
-        <div class="footer-brand">🎓 ${t("siteName")}</div>
-        <p class="footer-about">${t("footerAbout")}</p>
+        <div class="footer-brand">MAGIC🌞SUN ELLEN</div>
+        <p class="footer-about">Платформа для изучения эзотерических курсов, приобретения товаров, услуг и консультаций</p>
       </div>
       <div class="footer-col">
         <h4>${t("footerQuick")}</h4>
@@ -597,17 +597,10 @@ function injectFooter() {
         <a href="catalog.html">${t("sectionCourses")}</a>
         <a href="products.html">${t("products")}</a>
         <a href="services.html">${t("services")}</a>
-        <a href="https://vk.ru/album-210909831_283688982" target="_blank">${t("reviews")}</a>
-      </div>
-      <div class="footer-col">
-        <h4>${t("footerContacts")}</h4>
-        <a href="consultation.html">${t("consultation")}</a>
-        <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a>
-        ${socialLinks ? `<div class="footer-socials">${socialLinks}</div>` : ""}
       </div>
     </div>
     <div class="footer-bottom">
-      <span>© ${year} ${t("siteName")}</span>
+      <span>© ${year} MAGIC🌞SUN ELLEN</span>
       <span>${t("rightsReserved")}</span>
     </div>`;
   document.body.appendChild(footer);
