@@ -602,8 +602,11 @@ function injectFooter() {
         <a href="products.html">${t("products")}</a>
         <a href="services.html">${t("services")}</a>
       </div>
+      <div class="footer-col footer-messenger-col">
+        <h4>${t("footerContacts")}</h4>
+        ${messengerLinks || ""}
+      </div>
     </div>
-    ${messengerLinks ? `<div class="footer-messengers">${messengerLinks}</div>` : ""}
     <div class="footer-bottom">
       <span>© ${year} MAGIC🌞SUN ELLEN</span>
       <span>${t("rightsReserved")}</span>
