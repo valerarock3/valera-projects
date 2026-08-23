@@ -267,33 +267,29 @@ app.get("/api/proxy/gdrive", async (req, res) => {
 app.get("/api/proxy/ydisk", async (req, res) => {
   try {
     const id = String(req.query.id || "").trim();
-    if (!id || !/^[\w-]{5,}$/.test(id)) {
+    if (!id || id.length < 3) {
       return res.status(400).json({ error: "Invalid Yandex Disk file ID" });
     }
-    const apiRes = await new Promise((resolve, reject) => {
-      https.get(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${id}`, resp => {
-        let body = "";
-        resp.on("data", d => body += d);
-        resp.on("end", () => {
-          try { resolve(JSON.parse(body)); } catch { reject(new Error("Invalid API response")); }
-        });
-      }).on("error", reject);
-    });
-    if (!apiRes.href) {
+    const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=https://yadi.sk/d/${encodeURIComponent(id)}`);
+    if (!apiRes.ok) {
+      return res.status(502).json({ error: "Yandex Disk API returned " + apiRes.status });
+    }
+    const data = await apiRes.json();
+    if (!data.href) {
       return res.status(502).json({ error: "No download URL from Yandex Disk" });
     }
-    const upstream = await fetchGDriveRedirect(apiRes.href);
-    if (upstream.statusCode !== 200) {
-      upstream.resume();
-      return res.status(502).json({ error: "Yandex Disk returned " + upstream.statusCode });
+    const upstream = await fetch(data.href, { redirect: "follow" });
+    if (!upstream.ok) {
+      return res.status(502).json({ error: "Yandex Disk returned " + upstream.status });
     }
-    res.setHeader("Content-Type", upstream.headers["content-type"] || "video/mp4");
-    if (upstream.headers["content-length"]) {
-      res.setHeader("Content-Length", upstream.headers["content-length"]);
-    }
+    const contentType = upstream.headers.get("content-type") || "video/mp4";
+    const contentLength = upstream.headers.get("content-length");
+    res.setHeader("Content-Type", contentType);
+    if (contentLength) res.setHeader("Content-Length", contentLength);
     res.setHeader("Accept-Ranges", "bytes");
     res.setHeader("Cache-Control", "public, max-age=86400");
-    upstream.pipe(res);
+    const nodeStream = require("stream").Readable.fromWeb(upstream.body);
+    nodeStream.pipe(res);
   } catch (err) { serverError(res, err); }
 });
 
