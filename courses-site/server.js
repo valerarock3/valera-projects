@@ -282,29 +282,27 @@ app.get("/api/proxy/ydisk", async (req, res) => {
     const safeId = id.replace(/[^a-zA-Z0-9_-]/g, "_");
     const cacheDir = path.join(YDISK_CACHE_DIR, safeId);
     if (fs.existsSync(cacheDir)) {
-      const cached = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      const cached = findVideoFile(cacheDir);
       if (cached) {
-        const filePath = path.join(cacheDir, cached);
-        const stat = fs.statSync(filePath);
+        const stat = fs.statSync(cached);
         res.setHeader("Content-Type", getVideoMime(cached));
         res.setHeader("Content-Length", stat.size);
         res.setHeader("Accept-Ranges", "bytes");
         res.setHeader("Cache-Control", "public, max-age=86400");
-        fs.createReadStream(filePath).pipe(res);
+        fs.createReadStream(cached).pipe(res);
         return;
       }
     }
 
     if (ydiskProcessing.has(safeId)) {
       await ydiskProcessing.get(safeId);
-      const cached = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      const cached = findVideoFile(cacheDir);
       if (cached) {
-        const filePath = path.join(cacheDir, cached);
-        const stat = fs.statSync(filePath);
+        const stat = fs.statSync(cached);
         res.setHeader("Content-Type", getVideoMime(cached));
         res.setHeader("Content-Length", stat.size);
         res.setHeader("Accept-Ranges", "bytes");
-        fs.createReadStream(filePath).pipe(res);
+        fs.createReadStream(cached).pipe(res);
         return;
       }
     }
@@ -325,7 +323,7 @@ app.get("/api/proxy/ydisk", async (req, res) => {
       await extractZip(zipPath, { dir: cacheDir });
       try { fs.unlinkSync(zipPath); } catch (_) {}
 
-      const videoFile = fs.readdirSync(cacheDir).find(f => VIDEO_EXTS.has(path.extname(f).toLowerCase()));
+      const videoFile = findVideoFile(cacheDir);
       if (!videoFile) throw new Error("No video file in archive");
       return videoFile;
     })();
@@ -334,7 +332,7 @@ app.get("/api/proxy/ydisk", async (req, res) => {
     const videoFile = await promise;
     ydiskProcessing.delete(safeId);
 
-    const filePath = path.join(cacheDir, videoFile);
+    const filePath = videoFile;
     const stat = fs.statSync(filePath);
     res.setHeader("Content-Type", getVideoMime(videoFile));
     res.setHeader("Content-Length", stat.size);
@@ -346,6 +344,14 @@ app.get("/api/proxy/ydisk", async (req, res) => {
     serverError(res, err);
   }
 });
+
+function findVideoFile(dir) {
+  const files = fs.readdirSync(dir, { recursive: true });
+  const found = files.find(f => {
+    try { return fs.statSync(path.join(dir, f)).isFile() && VIDEO_EXTS.has(path.extname(f).toLowerCase()); } catch { return false; }
+  });
+  return found ? path.join(dir, found) : null;
+}
 
 function getVideoMime(filename) {
   const ext = path.extname(filename).toLowerCase();
