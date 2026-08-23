@@ -275,13 +275,8 @@ app.get("/api/proxy/gdrive", async (req, res) => {
   } catch (err) { serverError(res, err); }
 });
 const extractZip = require("extract-zip");
-const crypto = require("crypto");
-
-const YDISK_CACHE_DIR = path.join(__dirname, "..", "ydisk-cache");
-if (!fs.existsSync(YDISK_CACHE_DIR)) fs.mkdirSync(YDISK_CACHE_DIR, { recursive: true });
 
 const VIDEO_EXTS = new Set([".mp4", ".webm", ".mov", ".mkv", ".avi", ".m4v", ".ogv"]);
-const ydiskProcessing = new Map();
 
 app.get("/api/proxy/ydisk", async (req, res) => {
   try {
@@ -289,76 +284,42 @@ app.get("/api/proxy/ydisk", async (req, res) => {
     if (!ydiskUrl || !/yadi\.sk|disk\.yandex\.\w+/.test(ydiskUrl)) {
       return res.status(400).json({ error: "Invalid Yandex Disk URL" });
     }
-    const safeId = crypto.createHash("md5").update(ydiskUrl).digest("hex");
-    const cacheDir = path.join(YDISK_CACHE_DIR, safeId);
-    if (fs.existsSync(cacheDir)) {
-      const cached = findVideoFile(cacheDir);
-      if (cached) {
-        const stat = fs.statSync(cached);
-        res.setHeader("Content-Type", getVideoMime(cached));
-        res.setHeader("Content-Length", stat.size);
-        res.setHeader("Accept-Ranges", "bytes");
-        res.setHeader("Cache-Control", "public, max-age=86400");
-        fs.createReadStream(cached).pipe(res);
-        return;
-      }
-    }
 
-    if (ydiskProcessing.has(safeId)) {
-      await ydiskProcessing.get(safeId);
-      const cached = findVideoFile(cacheDir);
-      if (cached) {
-        const stat = fs.statSync(cached);
-        res.setHeader("Content-Type", getVideoMime(cached));
-        res.setHeader("Content-Length", stat.size);
-        res.setHeader("Accept-Ranges", "bytes");
-        fs.createReadStream(cached).pipe(res);
-        return;
-      }
-    }
+    const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=${encodeURIComponent(ydiskUrl)}`);
+    if (!apiRes.ok) throw new Error("Yandex API " + apiRes.status);
+    const data = await apiRes.json();
+    if (!data.href) throw new Error("No download URL");
 
-    const promise = (async () => {
-      fs.mkdirSync(cacheDir, { recursive: true });
-      const apiRes = await fetch(`https://cloud-api.yandex.net/v1/disk/public/resources/download?public_key=${encodeURIComponent(ydiskUrl)}`);
-      if (!apiRes.ok) throw new Error("Yandex API " + apiRes.status);
-      const data = await apiRes.json();
-      if (!data.href) throw new Error("No download URL");
+    const dlRes = await fetch(data.href);
+    if (!dlRes.ok) throw new Error("Download " + dlRes.status);
+    const contentType = dlRes.headers.get("content-type") || "";
 
-      const dlRes = await fetch(data.href);
-      if (!dlRes.ok) throw new Error("Download " + dlRes.status);
-      const contentType = dlRes.headers.get("content-type") || "";
+    if (contentType.includes("zip")) {
+      const tmpDir = path.join(require("os").tmpdir(), "ydisk-" + Date.now());
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const zipPath = path.join(tmpDir, "archive.zip");
       const buffer = Buffer.from(await dlRes.arrayBuffer());
-
-      if (contentType.includes("zip")) {
-        const zipPath = path.join(cacheDir, "download.zip");
-        fs.writeFileSync(zipPath, buffer);
-        await extractZip(zipPath, { dir: cacheDir });
-        try { fs.unlinkSync(zipPath); } catch (_) {}
-      } else {
-        const ext = contentType.includes("webm") ? ".webm" : contentType.includes("ogg") ? ".ogv" : ".mp4";
-        fs.writeFileSync(path.join(cacheDir, "video" + ext), buffer);
-      }
-
-      const videoFile = findVideoFile(cacheDir);
+      fs.writeFileSync(zipPath, buffer);
+      await extractZip(zipPath, { dir: tmpDir });
+      try { fs.unlinkSync(zipPath); } catch (_) {}
+      const videoFile = findVideoFile(tmpDir);
       if (!videoFile) throw new Error("No video file in archive");
-      return videoFile;
-    })();
-
-    ydiskProcessing.set(safeId, promise);
-    const videoFile = await promise;
-    ydiskProcessing.delete(safeId);
-
-    const filePath = videoFile;
-    const stat = fs.statSync(filePath);
-    res.setHeader("Content-Type", getVideoMime(videoFile));
-    res.setHeader("Content-Length", stat.size);
-    res.setHeader("Accept-Ranges", "bytes");
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    fs.createReadStream(filePath).pipe(res);
-  } catch (err) {
-    ydiskProcessing.delete(safeId);
-    serverError(res, err);
-  }
+      const stat = fs.statSync(videoFile);
+      res.setHeader("Content-Type", getVideoMime(videoFile));
+      res.setHeader("Content-Length", stat.size);
+      res.setHeader("Accept-Ranges", "bytes");
+      fs.createReadStream(videoFile).pipe(res);
+      res.on("finish", () => { try { fs.rmSync(tmpDir, { recursive: true }); } catch (_) {} });
+    } else {
+      const contentLength = dlRes.headers.get("content-length");
+      res.setHeader("Content-Type", contentType || "video/mp4");
+      if (contentLength) res.setHeader("Content-Length", contentLength);
+      res.setHeader("Accept-Ranges", "bytes");
+      const { Readable } = require("stream");
+      const nodeStream = Readable.fromWeb(dlRes.body);
+      nodeStream.pipe(res);
+    }
+  } catch (err) { serverError(res, err); }
 });
 
 function findVideoFile(dir) {
