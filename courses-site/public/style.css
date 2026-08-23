@@ -521,8 +521,9 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
     max-height: calc(100vh - 70px); overflow-y: auto;
   }
   .navbar .nav-links.open { display: flex; }
-    .navbar .nav-links .icon-btn { align-self: flex-start; }
-  }
+  .navbar .nav-links .icon-btn { align-self: flex-start; }
+  .notif-panel { width: calc(100vw - 32px); left: 16px; right: auto; }
+}
 
 @media (max-width: 860px) {
   .course-detail-grid { grid-template-columns: 1fr; }
@@ -552,12 +553,17 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
   .enroll-card .btn { margin-bottom: 8px; }
 }
 
-@media (max-width: 400px) {
-  .hero { padding: 36px 0 28px; }
-  .hero h1 { font-size: 26px; }
-  .hero p { font-size: 15px; }
-  .section-btn { padding: 18px; }
-  .ig-thumbs img { width: 72px; height: 52px; }
+@media (max-width: 720px) {
+  .hero { padding: 44px 0 36px; }
+  .hero h1 { font-size: 32px; }
+  .hero-stats { gap: 22px; }
+  .page-hero { margin: -28px -20px 24px; }
+  .footer-grid { grid-template-columns: 1fr; gap: 22px; }
+  .about-card { flex-direction: column; text-align: center; padding: 24px; }
+  .about-card img { width: 150px; height: 150px; }
+  .about-text { max-width: 100%; }
+  .author-header { flex-direction: column; align-items: center; text-align: center; }
+  .author-meta, .author-socials { justify-content: center; }
 }
 
 @media (max-width: 600px) {
@@ -601,15 +607,30 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
   .secure-note { font-size: 11px; }
 
   .payments-table { display: block; overflow-x: auto; white-space: nowrap; }
-  .admin-menu { display: flex; flex-wrap: wrap; }
-  .admin-menu button { width: auto; flex: 1 1 45%; text-align: center; }
+  .admin-menu { display: flex; flex-wrap: wrap; gap: 4px; }
+  .admin-menu button { width: auto; flex: 1 1 calc(50% - 4px); text-align: center; font-size: 13px; }
   .form-card { margin: 16px auto; }
+  .notif-panel { width: calc(100vw - 24px); left: 12px; right: auto; }
+}
+
+@media (max-width: 400px) {
+  .hero { padding: 36px 0 28px; }
+  .hero h1 { font-size: 26px; }
+  .hero p { font-size: 15px; }
+  .section-btn { padding: 18px; }
+  .ig-thumbs img { width: 72px; height: 52px; }
+  .admin-menu button { flex: 1 1 100%; }
+  .pagination { gap: 4px; }
+  .pagination button { min-width: 32px; height: 32px; padding: 0 8px; font-size: 13px; }
 }
 
 @media (max-width: 380px) {
   .navbar .logo { font-size: 17px; }
   .course-title { font-size: 15px; }
   .badge-free { display: inline-block; margin-top: 4px; margin-left: 0; }
+  .hero h1 { font-size: 22px; }
+  .hero p { font-size: 14px; }
+  .messenger-btn { padding: 12px 16px; font-size: 14px; }
 }
 
 /* Скорость воспроизведения (видео / аудио) */
@@ -674,11 +695,6 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
 }
 .author-social:hover { border-color: var(--accent); color: var(--accent); }
 
-@media (max-width: 720px) {
-  .author-header { flex-direction: column; align-items: center; text-align: center; }
-  .author-meta, .author-socials { justify-content: center; }
-}
-
 /* Заголовок раздела */
 .page-hero { margin: -28px -20px 28px; padding: 40px 20px 32px; text-align: center; position: relative; overflow: hidden; border-bottom: 1px solid var(--border); background: var(--grad-soft); }
 .page-hero::before {
@@ -701,14 +717,6 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
 .footer-col a:hover { color: var(--accent); transform: translateX(3px); }
 .footer-bottom { max-width: 1100px; margin: 28px auto 0; padding-top: 18px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text-faint); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
-@media (max-width: 720px) {
-  .hero { padding: 44px 0 36px; }
-  .hero h1 { font-size: 32px; }
-  .hero-stats { gap: 22px; }
-  .page-hero { margin: -28px -20px 24px; }
-  .footer-grid { grid-template-columns: 1fr; gap: 22px; }
-}
-
 /* Блок «О руководителе» */
 .about-card {
   display: flex; gap: 32px; align-items: center;
@@ -725,12 +733,6 @@ video.video-wrap, .video-wrap video { object-fit: contain; }
 }
 .about-name { font-size: 28px; margin: 8px 0 12px; letter-spacing: -.3px; }
 .about-text { color: var(--text-dim); line-height: 1.7; max-width: 560px; }
-
-@media (max-width: 720px) {
-  .about-card { flex-direction: column; text-align: center; padding: 24px; }
-  .about-card img { width: 150px; height: 150px; }
-  .about-text { max-width: 100%; }
-}
 
 /* Детальные страницы разделов (товары, услуги, консультации) */
 .product-card, .service-card, .consult-card { cursor: pointer; }

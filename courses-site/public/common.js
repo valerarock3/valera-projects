@@ -597,7 +597,7 @@ function injectFooter() {
         <a href="catalog.html">${t("sectionCourses")}</a>
         <a href="products.html">${t("products")}</a>
         <a href="services.html">${t("services")}</a>
-        <a href="reviews.html">${t("reviews")}</a>
+        <a href="https://vk.ru/album-210909831_283688982" target="_blank">${t("reviews")}</a>
       </div>
       <div class="footer-col">
         <h4>${t("footerContacts")}</h4>
