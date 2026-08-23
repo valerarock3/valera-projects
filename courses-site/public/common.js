@@ -593,7 +593,7 @@ function injectFooter() {
     <div class="footer-grid">
       <div>
         <div class="footer-brand">MAGIC🌞SUN ELLEN</div>
-        <p class="footer-about">Платформа для изучения эзотерических курсов, приобретения товаров, услуг и консультаций</p>
+        <p class="footer-about">Платформа для изучения курсов, приобретения товаров, услуг и консультаций</p>
       </div>
       <div class="footer-col">
         <h4>${t("footerQuick")}</h4>
