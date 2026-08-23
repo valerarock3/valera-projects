@@ -910,6 +910,22 @@
           <div class="form-group"><label>${t("contactPhone")}</label><input id="cfg-phone" value="${escapeHtml(cfg.contact_phone || "")}" placeholder="+7 999 000-00-00"></div>
           <div class="form-group"><label>${t("contactEmail")}</label><input id="cfg-email" value="${escapeHtml(cfg.contact_email || "")}" placeholder="support@courses.ru"></div>
           <button class="btn btn-primary" id="cfg-save">${t("save")}</button>
+        </div>
+
+        <div class="panel-title" style="margin-top:32px">${t("leaderSection")}</div>
+        <div class="admin-form">
+          <div class="form-group"><label>${t("leaderName")}</label><input id="cfg-leader-name" value="${escapeHtml(cfg.leader_name || "Елена (Magic Ellen)")}" placeholder="Имя руководителя"></div>
+          <div class="form-group"><label>${t("leaderText")}</label><textarea id="cfg-leader-text" rows="3">${escapeHtml(cfg.leader_text || "Дипломированный специалист, практик, эзотерик. Лично разрабатывает и курирует процесс обучения в каждом курсе.")}</textarea></div>
+          <div class="form-group">
+            <label>${t("leaderPhoto")}</label>
+            <div class="drop-zone" id="dz-leader-photo">
+              <div class="dz-text">🖼 ${t("dragImage")}</div>
+              <div class="dz-preview">${cfg.leader_photo ? `<img src="${escapeHtml(cfg.leader_photo)}">` : ""}</div>
+              <div class="dz-status"></div>
+            </div>
+            <input type="hidden" id="cfg-leader-photo" value="${escapeHtml(cfg.leader_photo || "")}">
+          </div>
+          <button class="btn btn-primary" id="cfg-leader-save">${t("save")}</button>
         </div>`;
       document.getElementById("cfg-save").addEventListener("click", async () => {
         const payload = {
@@ -925,6 +941,19 @@
         });
         alert(t("settingsSaved"));
       });
+      document.getElementById("cfg-leader-save").addEventListener("click", async () => {
+        const payload = {
+          leader_name: document.getElementById("cfg-leader-name").value,
+          leader_text: document.getElementById("cfg-leader-text").value,
+          leader_photo: document.getElementById("cfg-leader-photo").value,
+        };
+        await apiFetch("/api/admin/site-config", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        alert(t("settingsSaved"));
+      });
+      makeDropZone("dz-leader-photo", "cfg-leader-photo", "image/*");
     }
 
     function makeDropZone(zoneId, inputId, accept) {

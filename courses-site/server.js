@@ -767,7 +767,7 @@ app.get("/api/site-config", async (_req, res) => {
 app.post("/api/admin/site-config", requireAdmin, async (req, res) => {
   try {
     const data = req.body || {};
-    const allowed = ["contact_telegram", "contact_whatsapp", "contact_vk", "contact_phone", "contact_email"];
+    const allowed = ["contact_telegram", "contact_whatsapp", "contact_vk", "contact_phone", "contact_email", "leader_photo", "leader_name", "leader_text"];
     for (const key of allowed) {
       if (key in data) {
         await pool.query(

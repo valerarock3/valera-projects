@@ -52,5 +52,19 @@
 
   <script src="translations.js"></script>
   <script src="common.js"></script>
+  <script>
+    (async () => {
+      try {
+        const res = await fetch("/api/site-config");
+        const cfg = await res.json();
+        const img = document.querySelector(".about-card img");
+        if (cfg.leader_photo && img) img.src = cfg.leader_photo;
+        const name = document.querySelector(".about-name");
+        if (cfg.leader_name && name) name.textContent = cfg.leader_name;
+        const text = document.querySelector(".about-text");
+        if (cfg.leader_text && text) text.textContent = cfg.leader_text;
+      } catch (e) {}
+    })();
+  </script>
 </body>
 </html>
