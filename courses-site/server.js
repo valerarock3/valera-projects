@@ -116,7 +116,7 @@ const upload = multer({
       cb(null, name);
     },
   }),
-  limits: { fileSize: 500 * 1024 * 1024 },
+  limits: { fileSize: 1500 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     // SVG отклоняется: в SVG можно встроить скрипт (риск хранимого XSS)
     if (file.mimetype === "image/svg+xml" || /\.svg$/i.test(file.originalname)) {
